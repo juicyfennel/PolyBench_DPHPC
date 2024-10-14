@@ -22,16 +22,20 @@ parser.add_argument("--num-runs", type=int, help="Number of runs", default=1)
 args = parser.parse_args()
 
 if not args.no_gen:
+    print("**************************************************\n"
+          "Generating makefiles\n"
+          "**************************************************")
     lm_flag = ["cholesky",
                "gramschmidt",
                "correlation"]
-    extra_flags = "-DPOLYBENCH_TIME"
+    extra_flags = ""
     for category in categories:
         for root, dirs, files in os.walk(f"./{category}"):
             for kernel in dirs:
                 if not args.kernels == [] and kernel not in args.kernels:
                     continue
-
+                if args.verbose:
+                    print(kernel)
                 make_cmd = ["make", "clean"]
                 make_process = subprocess.run(make_cmd, cwd=os.path.join(root, kernel), capture_output=True, text=True)
 
@@ -60,11 +64,17 @@ if not args.no_gen:
                     makefile.write(content)
 
 if not args.no_make:
+    print("**************************************************\n"
+          "Running make\n"
+          "**************************************************")
     for category in categories:
         for root, dirs, files in os.walk(f"./{category}"):
             for kernel in dirs:
                 if not args.kernels == [] and kernel not in args.kernels:
                     continue
+                if args.verbose:
+                    print(kernel)
+
                 make_cmd = ["make"]
                 make_process = subprocess.run(make_cmd, cwd=os.path.join(root, kernel), capture_output=True, text=True)
 
@@ -77,11 +87,18 @@ if not args.no_make:
 
 measurements = {}
 
+print("**************************************************\n"
+      "Running Kernels\n"
+      "**************************************************")
 for category in categories:
     for root, dirs, files in os.walk(f"./{category}"):
         for kernel in dirs:
             if not args.kernels == [] and kernel not in args.kernels:
                 continue
+
+            if args.verbose:
+                print(kernel)
+
             measurements[kernel] = []
             for i in range(args.num_runs):
                 cmd = [f"./{kernel}"]
