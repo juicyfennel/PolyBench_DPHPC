@@ -83,12 +83,12 @@ static
 double rtclock()
 {
 #if defined(POLYBENCH_TIME) || defined(POLYBENCH_GFLOPS)
-    struct timeval Tp;
+    struct timespec Tp;
     int stat;
-    stat = gettimeofday (&Tp, NULL);
+    stat = clock_gettime(CLOCK_MONOTONIC_RAW, &Tp);
     if (stat != 0)
       printf ("Error return from gettimeofday: %d", stat);
-    return (Tp.tv_sec + Tp.tv_usec * 1.0e-6);
+    return (Tp.tv_sec + Tp.tv_nsec * 1.0e-9);
 #else
     return 0;
 #endif
