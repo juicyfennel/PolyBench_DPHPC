@@ -1,4 +1,4 @@
-# Ignore all
+# Ignore all (necessary to ignore executables)
 *
 
 # Unignore all with extensions
@@ -7,8 +7,12 @@
 # Unignore all dirs
 !*/
 
+# JetBrains IDE
 .idea/*
 
 # Make
 Makefile
 config.mk
+
+# Measurements
+measurements/*
