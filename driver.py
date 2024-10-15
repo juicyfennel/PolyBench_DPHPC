@@ -111,7 +111,10 @@ for category in categories:
                 if args.verbose:
                     sys.stdout.write(driver_process.stdout)
 
-with open(f"measurements/{datetime.now().strftime("%Y_%m_%d__%H:%M:%S")}.json", "w") as f:
+if not os.path.exists("measurements"):
+    os.makedirs("measurements")
+    
+with open(f"measurements/{datetime.now().strftime("%Y_%m_%d__%H:%M:%S")}.json", "w+") as f:
     json.dump(measurements, f)
 
 sys.exit(0)
