@@ -53,7 +53,7 @@ if not args.no_gen:
                 content += f"\t${{VERBOSE}} ${{CC}} -o {kernel} {kernel}.c ${{CFLAGS}} -I. -I{rel_root}/utilities {rel_root}/utilities/polybench.c ${{EXTRA_FLAGS}}\n\n"
 
                 if os.path.isfile(os.path.join(root, kernel, f"{kernel}_omp.c")):
-                    content += f"\t${{VERBOSE}} ${{CC}} -o {kernel}_omp {kernel}_omp.c ${{CFLAGS}} -I. -I{rel_root}/utilities {rel_root}/utilities/polybench.c ${{EXTRA_FLAGS}}\n\n"
+                    content += f"\t${{VERBOSE}} ${{CC}} -o {kernel}_omp {kernel}_omp.c ${{CFLAGS}} -I. -I{rel_root}/utilities {rel_root}/utilities/polybench.c -fopenmp ${{EXTRA_FLAGS}}\n\n"
 
                 if os.path.isfile(os.path.join(root, kernel, f"{kernel}_mpi.c")):
                     content += f"\t${{VERBOSE}} ${{CC}} -o {kernel}_mpi {kernel}_mpi.c ${{CFLAGS}} -I. -I{rel_root}/utilities {rel_root}/utilities/polybench.c ${{EXTRA_FLAGS}}\n\n"
@@ -100,6 +100,11 @@ for category in categories:
                 print(kernel)
 
             measurements[kernel] = []
+            if os.path.isfile(os.path.join(root, kernel, f"{kernel}_omp.c")):
+                measurements[f"{kernel}_omp"] = []
+            if os.path.isfile(os.path.join(root, kernel, f"{kernel}_mpi.c")):
+                measurements[f"{kernel}_mpi"] = []
+
             for i in range(args.num_runs):
                 cmd = [f"./{kernel}"]
                 driver_process = subprocess.run(cmd, cwd=os.path.join(root, kernel), capture_output=True, text=True)
@@ -110,6 +115,28 @@ for category in categories:
                     sys.exit(1)
                 if args.verbose:
                     sys.stdout.write(driver_process.stdout)
+
+                if os.path.isfile(os.path.join(root, kernel, f"{kernel}_omp.c")):
+                    cmd = [f"./{kernel}_omp"]
+                    driver_process = subprocess.run(cmd, cwd=os.path.join(root, kernel), capture_output=True, text=True)
+                    measurements[f"{kernel}_omp"].append(float(driver_process.stdout))
+                    if driver_process.returncode != 0:
+                        sys.stderr.write(f"Error running driver for kernel {kernel}_omp\n")
+                        sys.stderr.write(driver_process.stderr)
+                        sys.exit(1)
+                    if args.verbose:
+                        sys.stdout.write(driver_process.stdout)
+
+                if os.path.isfile(os.path.join(root, kernel, f"{kernel}_mpi.c")):
+                    cmd = [f"./{kernel}_mpi"]
+                    driver_process = subprocess.run(cmd, cwd=os.path.join(root, kernel), capture_output=True, text=True)
+                    measurements[f"{kernel}_mpi"].append(float(driver_process.stdout))
+                    if driver_process.returncode != 0:
+                        sys.stderr.write(f"Error running driver for kernel {kernel}_mpi\n")
+                        sys.stderr.write(driver_process.stderr)
+                        sys.exit(1)
+                    if args.verbose:
+                        sys.stdout.write(driver_process.stdout)
 
 if not os.path.exists("measurements"):
     os.makedirs("measurements")
