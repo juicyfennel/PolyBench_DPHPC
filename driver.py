@@ -108,7 +108,11 @@ for category in categories:
             for i in range(args.num_runs):
                 cmd = [f"./{kernel}"]
                 driver_process = subprocess.run(cmd, cwd=os.path.join(root, kernel), capture_output=True, text=True)
-                measurements[kernel].append(float(driver_process.stdout))
+                try:
+                    measurements[kernel].append(float(driver_process.stdout))
+                except ValueError:
+                    sys.stderr.write(f"Error converting output to float for kernel {kernel}: {driver_process.stdout}\n")
+                    sys.exit(1)
                 if driver_process.returncode != 0:
                     sys.stderr.write(f"Error running driver for kernel {kernel}\n")
                     sys.stderr.write(driver_process.stderr)
@@ -119,7 +123,11 @@ for category in categories:
                 if os.path.isfile(os.path.join(root, kernel, f"{kernel}_omp.c")):
                     cmd = [f"./{kernel}_omp"]
                     driver_process = subprocess.run(cmd, cwd=os.path.join(root, kernel), capture_output=True, text=True)
-                    measurements[f"{kernel}_omp"].append(float(driver_process.stdout))
+                    try:
+                        measurements[f"{kernel}_omp"].append(float(driver_process.stdout))
+                    except ValueError:
+                        sys.stderr.write(f"Error converting output to float for kernel {kernel}_omp: {driver_process.stdout}\n")
+                        sys.exit(1)
                     if driver_process.returncode != 0:
                         sys.stderr.write(f"Error running driver for kernel {kernel}_omp\n")
                         sys.stderr.write(driver_process.stderr)
@@ -130,7 +138,11 @@ for category in categories:
                 if os.path.isfile(os.path.join(root, kernel, f"{kernel}_mpi.c")):
                     cmd = [f"./{kernel}_mpi"]
                     driver_process = subprocess.run(cmd, cwd=os.path.join(root, kernel), capture_output=True, text=True)
-                    measurements[f"{kernel}_mpi"].append(float(driver_process.stdout))
+                    try:
+                        measurements[f"{kernel}_mpi"].append(float(driver_process.stdout))
+                    except ValueError:
+                        sys.stderr.write(f"Error converting output to float for kernel {kernel}_mpi: {driver_process.stdout}\n")
+                        sys.exit(1)
                     if driver_process.returncode != 0:
                         sys.stderr.write(f"Error running driver for kernel {kernel}_mpi\n")
                         sys.stderr.write(driver_process.stderr)
@@ -138,10 +150,14 @@ for category in categories:
                     if args.verbose:
                         sys.stdout.write(driver_process.stdout)
 
+# Calculate averages and add to measurements
+averages = {kernel: sum(times) / len(times) if len(times) > 0 else 0 for kernel, times in measurements.items()}
+measurements["averages"] = averages
+
 if not os.path.exists("measurements"):
     os.makedirs("measurements")
-    
-with open(f"measurements/{datetime.now().strftime("%Y_%m_%d__%H:%M:%S")}.json", "w+") as f:
-    json.dump(measurements, f)
+
+with open(f"measurements/{datetime.now().strftime('%Y_%m_%d__%H:%M:%S')}.json", "w+") as f:
+    json.dump(measurements, f, indent=4)
 
 sys.exit(0)
