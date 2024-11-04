@@ -175,7 +175,7 @@ for dataset in args.input_size:
 if not os.path.exists("measurements"):
     os.makedirs("measurements")
     
-with open(f"measurements/{datetime.now().strftime("%Y_%m_%d__%H:%M:%S")}.json", "w+") as f:
+with open(f"measurements/{datetime.now().strftime('%Y_%m_%d__%H:%M:%S')}.json", "w+") as f:
     json.dump(measurements, f)
 
 sys.exit(0)
