@@ -27,7 +27,7 @@ def plot_kernel_results(kernel):
     # Calculate averages for each dataset size
     dataset_sizes = list(data.keys())
     short_labels = [size.split('_')[0] for size in dataset_sizes]  # Use short labels like MINI, SMALL, etc.
-    labels = ["default", "omp", "mpi"]  # Updated to match the keys in your JSON file
+    labels = [f"{kernel}", f"{kernel}_omp", f"{kernel}_mpi"]  # Updated to match the keys in your JSON file
     averages = {label: [] for label in labels}
 
     for size in dataset_sizes:
