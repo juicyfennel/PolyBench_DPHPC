@@ -1,60 +1,70 @@
+import argparse
 import os
-import sys
 import json
+import pandas as pd
+import seaborn as sns
 import matplotlib.pyplot as plt
 import numpy as np
+from datetime import datetime
 
-def get_latest_file(directory):
-    files = [f for f in os.listdir(directory) if f.endswith('.json')]
-    if not files:
-        raise FileNotFoundError("No JSON files found in the directory.")
-    # Sort files by modified time and get the latest one
-    latest_file = max(files, key=lambda f: os.path.getmtime(os.path.join(directory, f)))
-    return os.path.join(directory, latest_file)
+# Argument parser to take the kernel as input
+parser = argparse.ArgumentParser(description="Plot execution times for a given kernel")
+parser.add_argument("kernel", type=str, help="Base name of the kernel (e.g., 'gemver')")
+args = parser.parse_args()
 
-def plot_kernel_results(kernel):
-    # Define the path to the kernel's measurements directory
-    kernel_dir = os.path.join("measurements", kernel)
-    if not os.path.exists(kernel_dir):
-        print(f"Directory {kernel_dir} does not exist.")
-        return
+# Construct the directory path for the given kernel
+kernel_dir = os.path.join("measurements", args.kernel)
 
-    # Load the latest JSON file
-    latest_file = get_latest_file(kernel_dir)
-    with open(latest_file, "r") as f:
-        data = json.load(f)
+# Check if the directory exists
+if not os.path.exists(kernel_dir):
+    print(f"Error: The directory {kernel_dir} does not exist.")
+    exit(1)
 
-    # Calculate averages for each dataset size
-    dataset_sizes = list(data.keys())
-    short_labels = [size.split('_')[0] for size in dataset_sizes]  # Use short labels like MINI, SMALL, etc.
-    labels = [f"{kernel}", f"{kernel}_omp", f"{kernel}_mpi"]  # Updated to match the keys in your JSON file
-    averages = {label: [] for label in labels}
+# Get the list of JSON files in the directory
+json_files = [f for f in os.listdir(kernel_dir) if f.endswith(".json")]
+if not json_files:
+    print(f"Error: No JSON files found in {kernel_dir}")
+    exit(1)
 
-    for size in dataset_sizes:
-        for label in labels:
-            if label in data[size]:
-                times = data[size][label]
-                avg_time = np.mean(times)
-                averages[label].append(avg_time)
-            else:
-                averages[label].append(None)  # Append None if the label is not in the data
+# Find the latest JSON file based on the timestamp in the filename
+latest_file = max(json_files, key=lambda f: datetime.strptime(f.split(".")[0], "%Y_%m_%d__%H:%M:%S"))
+latest_file_path = os.path.join(kernel_dir, latest_file)
 
-    # Plotting
-    x = short_labels
-    for label in labels:
-        plt.plot(x, averages[label], marker='o', label=label)
+# Load the data from the latest JSON file
+with open(latest_file_path, "r") as file:
+    data = json.load(file)
 
-    plt.xlabel("Dataset Size")
-    plt.ylabel("Average Execution Time (s)")
-    plt.title(f"Average Execution Time for {kernel}")
-    plt.legend()
-    plt.grid(visible=True, linestyle='--', alpha=0.5)
-    plt.show()
+# Convert JSON data to a DataFrame for plotting
+rows = []
+for dataset, kernels in data.items():
+    for version, times in kernels.items():
+        for time in times:
+            rows.append({"Dataset": dataset, "Kernel Version": version, "Execution Time": time})
 
-if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        print("Usage: python plot.py <kernel_name>")
-        sys.exit(1)
+df = pd.DataFrame(rows)
 
-    kernel_name = sys.argv[1]
-    plot_kernel_results(kernel_name)
+# Create the plot
+plt.figure(figsize=(12, 8))
+sns.set(style="whitegrid")
+
+# Line plot with confidence interval for the median
+sns.lineplot(
+    x="Dataset",
+    y="Execution Time",
+    hue="Kernel Version",
+    data=df,
+    estimator=np.median,  # dk if median or mean is better
+    ci=95,  # 95% confidence interval
+    n_boot=1000  # Number of bootstrap samples
+)
+
+# Set the axis labels and title
+plt.xlabel("Dataset Size", fontsize=12)
+plt.ylabel("Execution Time (seconds)", fontsize=12)
+plt.title(f"Execution Time Comparison for {args.kernel} Across Different Versions and Dataset Sizes", fontsize=14)
+plt.xticks(rotation=45)  # Rotate x-axis labels for better readability
+plt.legend(title="Kernel Version", fontsize=10)
+
+# Show the plot
+plt.tight_layout()
+plt.show()
