@@ -87,13 +87,13 @@ if not args.no_make:
 
 measurements = {}
 
-# Special dataset sizes for gemver
+# Dataset sizes 
 dataset_sizes = {
-    "MINI_DATASET": 40,
-    "SMALL_DATASET": 120,
-    "MEDIUM_DATASET": 400,
-    "LARGE_DATASET": 2000,
-    "EXTRALARGE_DATASET": 4000
+    "MINI_DATASET",
+    "SMALL_DATASET",
+    "MEDIUM_DATASET",
+    "LARGE_DATASET",
+    "EXTRALARGE_DATASET"
 }
 
 print("**************************************************\n"
@@ -109,7 +109,7 @@ for category in categories:
 
             # Initialize measurements for the kernel
             measurements[kernel] = {}
-            for dataset, size in dataset_sizes.items():
+            for dataset in dataset_sizes:
                 measurements[kernel][dataset] = {"default": []}
 
                 # Check for parallel versions

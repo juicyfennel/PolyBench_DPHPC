@@ -27,14 +27,17 @@ def plot_kernel_results(kernel):
     # Calculate averages for each dataset size
     dataset_sizes = list(data.keys())
     short_labels = [size.split('_')[0] for size in dataset_sizes]  # Use short labels like MINI, SMALL, etc.
-    labels = ["gemver", "gemver_omp", "gemver_mpi"]
+    labels = ["default", "omp", "mpi"]  # Updated to match the keys in your JSON file
     averages = {label: [] for label in labels}
 
     for size in dataset_sizes:
         for label in labels:
-            times = data[size][label]
-            avg_time = np.mean(times)
-            averages[label].append(avg_time)
+            if label in data[size]:
+                times = data[size][label]
+                avg_time = np.mean(times)
+                averages[label].append(avg_time)
+            else:
+                averages[label].append(None)  # Append None if the label is not in the data
 
     # Plotting
     x = short_labels
