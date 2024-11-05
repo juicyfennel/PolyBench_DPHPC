@@ -32,7 +32,9 @@ parser.add_argument("--input-size", type=str, nargs="+", help="Input size for ke
 args = parser.parse_args()
 
 
-measurements = {}
+measurements_all = {} 
+for kernel in args.kernels: 
+    measurements_all[kernel] = {}
 
 for dataset in args.input_size:
 
@@ -109,7 +111,8 @@ for dataset in args.input_size:
         "Running Kernels\n"
         "**************************************************")
     
-    measurements[dataset] = {}
+    for kernel in measurements_all:
+        measurements_all[kernel][dataset] = {}
 
     for category in categories:
         for root, dirs, files in os.walk(f"./{category}"):
@@ -120,6 +123,7 @@ for dataset in args.input_size:
                 if args.verbose:
                     print(kernel)
 
+                measurements = measurements_all[kernel]
                 measurements[dataset][kernel] = []
                 if os.path.isfile(os.path.join(root, kernel, f"{kernel}_omp.c")):
                     measurements[dataset][f"{kernel}_omp"] = []
@@ -174,8 +178,12 @@ for dataset in args.input_size:
 
 if not os.path.exists("measurements"):
     os.makedirs("measurements")
-    
-with open(f"measurements/{datetime.now().strftime('%Y_%m_%d__%H:%M:%S')}.json", "w+") as f:
-    json.dump(measurements, f)
+for kernel in measurements_all:
+    measurements = measurements_all[kernel]
+    kernel_dir = os.path.join("measurements", kernel)
+    if not os.path.exists(kernel_dir):
+        os.makedirs(kernel_dir)
+    with open(f"{kernel_dir}/{datetime.now().strftime('%Y_%m_%d__%H:%M:%S')}.json", "w+") as f:
+        json.dump(measurements, f)    
 
 sys.exit(0)
