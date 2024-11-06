@@ -16,3 +16,6 @@ config.mk
 
 # Measurements
 measurements/*
+
+# plots
+plots/*
