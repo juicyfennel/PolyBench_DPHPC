@@ -100,7 +100,12 @@ if not args.no_gen:
         for dataset in args.input_size:
             content += f"{kernel}_{dataset}: {kernel}.c {kernel}.h\n"
             for interface in args.interfaces:
-                content += f"\t${{VERBOSE}} ${{CC}} -o {kernel}_{dataset}{interfaces[interface]} {kernel}{interfaces[interface]}.c ${{CFLAGS}} -I. -I{utilities_path} {pb_source_path} {datasets[dataset]} ${{EXTRA_FLAGS}}\n\n"
+                content += f"\t${{VERBOSE}} ${{CC}} -o {kernel}_{dataset}{interfaces[interface]} "
+                content += f"{kernel}{interfaces[interface]}.c ${{CFLAGS}} -I. -I{utilities_path} "
+                content += f"{pb_source_path} {datasets[dataset]} ${{EXTRA_FLAGS}}"
+                if interface == "omp":
+                    content += " -fopenmp"
+                content += "\n\n"
         
         content += "clean:\n\t@ rm -f "
         for interface in interfaces:
