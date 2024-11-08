@@ -16,3 +16,4 @@ config.mk
 
 # Measurements
 measurements/*
+.vscode
