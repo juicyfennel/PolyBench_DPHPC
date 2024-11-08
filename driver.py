@@ -56,7 +56,7 @@ parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output
 parser.add_argument("--num-runs", type=int, help="Number of runs", default=1)
 parser.add_argument("--validate", action="store_true", help="Validate results against reference")
 parser.add_argument("--input-size", type=str, nargs="+", help="Input size for kernels (default = medium) (selection: 'mini', 'small', 'medium', 'large', 'extralarge')", default=["medium"])
-
+parser.add_argument("--cores", type=int, help="Number of cores to use for MPI", default=2)
 
 args = parser.parse_args()
 
@@ -98,20 +98,17 @@ if not args.no_gen:
         content += "\n\n"
 
         for dataset in args.input_size:
-            content += f"{kernel}_{dataset}: {kernel}.c {kernel}.h\n"
             for interface in args.interfaces:
-                content += f"\t${{VERBOSE}} ${{CC}} -o {kernel}_{dataset}{interfaces[interface]} "
+                content += f"{kernel}_{dataset}_{interface}: {kernel}.c {kernel}.h\n"
+                content += f"\t@mkdir -p bin\n\t${{VERBOSE}} "
+                content += f"mpicc" if interface == "mpi" else f"${{CC}}"
+                content += f" -o bin/{kernel}_{dataset}{interfaces[interface]} "
                 content += f"{kernel}{interfaces[interface]}.c ${{CFLAGS}} -I. -I{utilities_path} "
                 content += f"{pb_source_path} {datasets[dataset]} ${{EXTRA_FLAGS}}"
-                if interface == "omp":
-                    content += " -fopenmp"
+                content += " -fopenmp" if interface == "omp" else ""
                 content += "\n\n"
         
-        content += "clean:\n\t@ rm -f "
-        for interface in interfaces:
-            for dataset in datasets:
-                content += f"{kernel}_{dataset}{interfaces[interface]} "
-        content += "\n\n"
+        content += "clean:\n\t@ rm -f bin/*\n\n"
 
         with open(os.path.join(kernels[kernel], "Makefile"), 'w') as makefile:
             makefile.write(content)
@@ -128,8 +125,9 @@ if not args.no_make:
 
         make_cmd = ["make"]
         for dataset in args.input_size:
-            make_cmd.append(f"{kernel}_{dataset}")
-            make_process = subprocess.run(make_cmd, cwd=kernels[kernel], capture_output=True, text=True)
+            for interface in args.interfaces:
+                make_cmd.append(f"{kernel}_{dataset}_{interface}")
+                make_process = subprocess.run(make_cmd, cwd=kernels[kernel], capture_output=True, text=True)
 
         if make_process.returncode != 0:
             sys.stderr.write(f"Error running make for kernel {kernel}\n")
@@ -153,8 +151,10 @@ for kernel in args.kernels:
         for interface in args.interfaces:
             measurements[kernel][dataset][interface] = []
 
-def run_kernel(kernel, interface, dataset, dump_strs):
-    cmd = [f"./{kernel}_{dataset}{interfaces[interface]}"]
+def run_kernel(kernel, interface, dataset, dump_strs, cores=2):
+    cmd = [f"./bin/{kernel}_{dataset}{interfaces[interface]}"]
+    if interface == "mpi":
+        cmd = ["mpiexec", "-np", str(cores)] + cmd
     driver_process = subprocess.run(cmd, cwd=kernels[kernel], capture_output=True, text=True)
     measurements = float(driver_process.stdout)
     if driver_process.returncode != 0:
@@ -183,7 +183,8 @@ for kernel in args.kernels:
     for dataset in args.input_size:
         for interface in args.interfaces:
             for i in range(args.num_runs):
-                measurements[kernel][dataset][interface].append(run_kernel(kernel, interface, dataset, dump_strs))
+                result = run_kernel(kernel, interface, dataset, dump_strs, args.cores)
+                measurements[kernel][dataset][interface].append(result)
 
 if not os.path.exists("measurements"):
     os.makedirs("measurements")
