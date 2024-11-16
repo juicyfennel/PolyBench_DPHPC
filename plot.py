@@ -65,6 +65,10 @@ plt.title(f"Execution Time Comparison for {args.kernel} Across Different Version
 plt.xticks(rotation=45)  # Rotate x-axis labels for better readability
 plt.legend(title="Kernel Version", fontsize=10)
 
+# Set fixed y-axis steps
+y_min, y_max = df["Execution Time"].min(), df["Execution Time"].max()
+plt.yticks(np.arange(y_min, y_max + 0.025, 0.025))
+
 # Show the plot
 plt.tight_layout()
 plt.show()
