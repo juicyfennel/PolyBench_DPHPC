@@ -6,12 +6,36 @@ import json
 import re
 from datetime import datetime
 
-categories = ["linear-algebra/kernels",
-              "linear-algebra/blas",
-              "linear-algebra/solvers",
-              "datamining",
-              "medley",
-              "stencils"]
+kernels = {'2mm': './linear-algebra/kernels/2mm',
+           '3mm': './linear-algebra/kernels/3mm',
+           'atax': './linear-algebra/kernels/atax',
+           'bicg': './linear-algebra/kernels/bicg',
+           'doitgen': './linear-algebra/kernels/doitgen',
+           'mvt': './linear-algebra/kernels/mvt',
+           'gemm': './linear-algebra/blas/gemm',
+           'gemver': './linear-algebra/blas/gemver',
+           'gesummv': './linear-algebra/blas/gesummv',
+           'symm': './linear-algebra/blas/symm',
+           'syr2k': './linear-algebra/blas/syr2k',
+           'syrk': './linear-algebra/blas/syrk',
+           'trmm': './linear-algebra/blas/trmm',
+           'cholesky': './linear-algebra/solvers/cholesky',
+           'durbin': './linear-algebra/solvers/durbin',
+           'gramschmidt': './linear-algebra/solvers/gramschmidt',
+           'lu': './linear-algebra/solvers/lu',
+           'ludcmp': './linear-algebra/solvers/ludcmp',
+           'trisolv': './linear-algebra/solvers/trisolv',
+           'correlation': './datamining/correlation',
+           'covariance': './datamining/covariance',
+           'deriche': './medley/deriche',
+           'floyd-warshall': './medley/floyd-warshall',
+           'nussinov': './medley/nussinov',
+           'adi': './stencils/adi',
+           'fdtd-2d': './stencils/fdtd-2d',
+           'heat-3d': './stencils/heat-3d',
+           'jacobi-1d': './stencils/jacobi-1d',
+           'jacobi-2d': './stencils/jacobi-2d',
+           'seidel-2d': './stencils/seidel-2d'}
 
 datasets = {"mini": "-DMINI_DATASET",
             "small": "-DSMALL_DATASET",
@@ -19,171 +43,156 @@ datasets = {"mini": "-DMINI_DATASET",
             "large": "-DLARGE_DATASET",
             "extralarge": "-DEXTRALARGE_DATASET"}
 
+interfaces = {"std": "",
+              "omp" : "_omp",
+              "mpi" : "_mpi"}
+
 parser = argparse.ArgumentParser(description="Python script that wraps PolyBench")
-parser.add_argument("--kernels", type=str, nargs="+", help="Kernels to run (default = all)", default=[])
-parser.add_argument("--no-gen", action="store_true", help="Do not regenerate makefiles (works only with a single dataset)")
-parser.add_argument("--no-make", action="store_true", help="Do not run make (works only with a single dataset)")
+parser.add_argument("--kernels", type=str, nargs="+", help="Kernels to run (default = all)", default=kernels.keys())
+parser.add_argument("--interfaces", type=str, nargs="+", help="Interfaces to run (default = all) (selection: 'std', 'omp', 'mpi')", default=["std", "omp", "mpi"])
+parser.add_argument("--no-gen", action="store_true", help="Do not regenerate makefiles")
+parser.add_argument("--no-make", action="store_true", help="Do not run make")
 parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output")
 parser.add_argument("--num-runs", type=int, help="Number of runs", default=1)
 parser.add_argument("--validate", action="store_true", help="Validate results against reference")
-parser.add_argument("--input-size", type=str, nargs="+", help="Input size for kernels (select from 'mini', 'small', 'medium', 'large', 'extralarge')", default=["medium"])
+parser.add_argument("--input-size", type=str, nargs="+", help="Input size for kernels (default = medium) (selection: 'mini', 'small', 'medium', 'large', 'extralarge')", default=["medium"])
 
 
 args = parser.parse_args()
 
+# Make sure the standard kernel is ran first if validation is enabled
+if args.validate:
+    if "std" in args.interfaces:
+        args.interfaces.remove("std")
+    args.interfaces.insert(0, "std")
 
-measurements_all = {} 
-for kernel in args.kernels: 
-    measurements_all[kernel] = {}
-
-for dataset in args.input_size:
-
-    if not args.no_gen:
-        print("**************************************************\n"
-            "Generating makefiles\n"
-            "**************************************************")
-        
-        lm_flag = ["cholesky",
-                "gramschmidt",
-                "correlation"]
-        extra_flags = datasets[dataset]
-        if args.validate:
-            extra_flags += " -DPOLYBENCH_DUMP_ARRAYS"
-        for category in categories:
-            for root, dirs, files in os.walk(f"./{category}"):
-                for kernel in dirs:
-                    if not args.kernels == [] and kernel not in args.kernels:
-                        continue
-                    if args.verbose:
-                        print(kernel)
-                    make_cmd = ["make", "clean"]
-                    make_process = subprocess.run(make_cmd, cwd=os.path.join(root, kernel), capture_output=True, text=True)
-
-                    kernel_path = os.path.join(root, kernel)
-                    rel_root = os.path.relpath(".", kernel_path)
-
-                    content = f"include {rel_root}/config.mk\n\n"
-                    content += f"EXTRA_FLAGS={extra_flags}"
-
-                    if kernel in lm_flag:
-                        content += " -lm"
-
-                    content += "\n\n"
-                    content += f"{kernel}: {kernel}.c {kernel}.h\n"
-                    content += f"\t${{VERBOSE}} ${{CC}} -o {kernel} {kernel}.c ${{CFLAGS}} -I. -I{rel_root}/utilities {rel_root}/utilities/polybench.c ${{EXTRA_FLAGS}}\n\n"
-
-                    if os.path.isfile(os.path.join(root, kernel, f"{kernel}_omp.c")):
-                        content += f"\t${{VERBOSE}} ${{CC}} -o {kernel}_omp {kernel}_omp.c ${{CFLAGS}} -I. -I{rel_root}/utilities {rel_root}/utilities/polybench.c -fopenmp ${{EXTRA_FLAGS}}\n\n"
-
-                    if os.path.isfile(os.path.join(root, kernel, f"{kernel}_mpi.c")):
-                        content += f"\t${{VERBOSE}} ${{CC}} -o {kernel}_mpi {kernel}_mpi.c ${{CFLAGS}} -I. -I{rel_root}/utilities {rel_root}/utilities/polybench.c ${{EXTRA_FLAGS}}\n\n"
-
-                    content += f"clean:\n\t@ rm -f {kernel} {kernel}_omp {kernel}_mpi\n"
-
-                    with open(os.path.join(root, kernel, "Makefile"), 'w') as makefile:
-                        makefile.write(content)
-
-    if not args.no_make:
-        print("**************************************************\n"
-            "Running make\n"
-            "**************************************************")
-        
-        for category in categories:
-            for root, dirs, files in os.walk(f"./{category}"):
-                for kernel in dirs:
-                    if not args.kernels == [] and kernel not in args.kernels:
-                        continue
-                    if args.verbose:
-                        print(kernel)
-
-                    make_cmd = ["make"]
-                    make_process = subprocess.run(make_cmd, cwd=os.path.join(root, kernel), capture_output=True, text=True)
-
-                    if make_process.returncode != 0:
-                        sys.stderr.write(f"Error running make for kernel {kernel}\n")
-                        sys.stderr.write(make_process.stderr)
-                        sys.exit(1)
-                    if args.verbose:
-                        sys.stdout.write(make_process.stdout)
-
-
+if not args.no_gen:
     print("**************************************************\n"
-        "Running Kernels\n"
-        "**************************************************")
+          "Generating makefiles\n"
+          "**************************************************")
     
-    for kernel in measurements_all:
-        measurements_all[kernel][dataset] = {}
+    lm_flag = ["cholesky",
+               "gramschmidt",
+               "correlation"]
 
-    for category in categories:
-        for root, dirs, files in os.walk(f"./{category}"):
-            for kernel in dirs:
-                if not args.kernels == [] and kernel not in args.kernels:
-                    continue
+    extra_flags = ""
+    if args.validate:
+        extra_flags += " -DPOLYBENCH_DUMP_ARRAYS"
 
-                if args.verbose:
-                    print(kernel)
+    for kernel in args.kernels:
+        if args.verbose:
+            print(kernel)
+        make_cmd = ["make", "clean"]
+        make_process = subprocess.run(make_cmd, cwd=kernels[kernel], capture_output=True, text=True)
 
-                measurements = measurements_all[kernel]
-                measurements[dataset][kernel] = []
-                if os.path.isfile(os.path.join(root, kernel, f"{kernel}_omp.c")):
-                    measurements[dataset][f"{kernel}_omp"] = []
-                if os.path.isfile(os.path.join(root, kernel, f"{kernel}_mpi.c")):
-                    measurements[dataset][f"{kernel}_mpi"] = []
+        rel_root = os.path.relpath(".", kernels[kernel])
+        utilities_path = os.path.join(rel_root, "utilities")
+        pb_source_path = os.path.join(utilities_path, "polybench.c")
 
-                for i in range(args.num_runs):
-                    cmd = [f"./{kernel}"]
-                    driver_process = subprocess.run(cmd, cwd=os.path.join(root, kernel), capture_output=True, text=True)
-                    measurements[dataset][kernel].append(float(driver_process.stdout))
-                    if driver_process.returncode != 0:
-                        sys.stderr.write(f"Error running driver for kernel {kernel}\n")
-                        sys.stderr.write(driver_process.stderr)
-                        sys.exit(1)
-                    if args.verbose:
-                        sys.stdout.write(driver_process.stdout)
-                    if args.validate:
-                        regex_str = r"==BEGIN +DUMP_ARRAYS==\n(?P<dump>(.|\n)*)==END +DUMP_ARRAYS=="
-                        dump_str = re.search(regex_str, driver_process.stderr).group("dump")
+        content = f"include {rel_root}/config.mk\n\n"
+        content += f"EXTRA_FLAGS={extra_flags}"
 
-                    if os.path.isfile(os.path.join(root, kernel, f"{kernel}_omp.c")):
-                        cmd = [f"./{kernel}_omp"]
-                        driver_process_omp = subprocess.run(cmd, cwd=os.path.join(root, kernel), capture_output=True, text=True)
-                        measurements[dataset][f"{kernel}_omp"].append(float(driver_process_omp.stdout))
-                        if driver_process_omp.returncode != 0:
-                            sys.stderr.write(f"Error running driver for kernel {kernel}_omp\n")
-                            sys.stderr.write(driver_process_omp.stderr)
-                            sys.exit(1)
-                        if args.verbose:
-                            sys.stdout.write(driver_process_omp.stdout)
-                        if args.validate:
-                            dump_str_omp = re.search(regex_str, driver_process_omp.stderr).group("dump")
-                            if not dump_str == dump_str_omp:
-                                sys.stderr.write(f"Validation failed for kernel {kernel}_omp\n")
-                                sys.exit(1)
+        if kernel in lm_flag:
+            content += " -lm"
 
-                    if os.path.isfile(os.path.join(root, kernel, f"{kernel}_mpi.c")):
-                        cmd = [f"./{kernel}_mpi"]
-                        driver_process_mpi = subprocess.run(cmd, cwd=os.path.join(root, kernel), capture_output=True, text=True)
-                        measurements[dataset][f"{kernel}_mpi"].append(float(driver_process_mpi.stdout))
-                        if driver_process_mpi.returncode != 0:
-                            sys.stderr.write(f"Error running driver for kernel {kernel}_mpi\n")
-                            sys.stderr.write(driver_process_mpi.stderr)
-                            sys.exit(1)
-                        if args.verbose:
-                            sys.stdout.write(driver_process_mpi.stdout)
-                        if args.validate:
-                            dump_str_mpi = re.search(regex_str, driver_process_mpi.stderr).group("dump")
-                            if not dump_str == dump_str_mpi:
-                                sys.stderr.write(f"Validation failed for kernel {kernel}_mpi\n")
-                                sys.exit(1)
+        content += "\n\n"
+
+        for dataset in args.input_size:
+            content += f"{kernel}_{dataset}: {kernel}.c {kernel}.h\n"
+            for interface in args.interfaces:
+                content += f"\t${{VERBOSE}} ${{CC}} -o {kernel}_{dataset}{interfaces[interface]} "
+                content += f"{kernel}{interfaces[interface]}.c ${{CFLAGS}} -I. -I{utilities_path} "
+                content += f"{pb_source_path} {datasets[dataset]} ${{EXTRA_FLAGS}}"
+                if interface == "omp":
+                    content += " -fopenmp"
+                content += "\n\n"
+        
+        content += "clean:\n\t@ rm -f "
+        for interface in interfaces:
+            for dataset in datasets:
+                content += f"{kernel}_{dataset}{interfaces[interface]} "
+        content += "\n\n"
+
+        with open(os.path.join(kernels[kernel], "Makefile"), 'w') as makefile:
+            makefile.write(content)
+
+
+if not args.no_make:
+    print("**************************************************\n"
+          "Running make\n"
+          "**************************************************")
+    
+    for kernel in args.kernels:
+        if args.verbose:
+            print(kernel)
+
+        make_cmd = ["make"]
+        for dataset in args.input_size:
+            make_cmd.append(f"{kernel}_{dataset}")
+            make_process = subprocess.run(make_cmd, cwd=kernels[kernel], capture_output=True, text=True)
+
+        if make_process.returncode != 0:
+            sys.stderr.write(f"Error running make for kernel {kernel}\n")
+            sys.stderr.write(make_process.stderr)
+            sys.exit(1)
+        if args.verbose:
+            sys.stdout.write(make_process.stdout)
+
+
+print("**************************************************\n"
+      "Running Kernels\n"
+      "**************************************************")
+
+
+measurements = {}
+
+for kernel in args.kernels:
+    measurements[kernel] = {}
+    for dataset in args.input_size:
+        measurements[kernel][dataset] = {}
+        for interface in args.interfaces:
+            measurements[kernel][dataset][interface] = []
+
+def run_kernel(kernel, interface, dataset, dump_strs):
+    cmd = [f"./{kernel}_{dataset}{interfaces[interface]}"]
+    driver_process = subprocess.run(cmd, cwd=kernels[kernel], capture_output=True, text=True)
+    measurements = float(driver_process.stdout)
+    if driver_process.returncode != 0:
+        sys.stderr.write(f"Error running driver for kernel {kernel}_{dataset}{interfaces[interface]}\n")
+        sys.stderr.write(driver_process.stderr)
+        sys.exit(1)
+    if args.verbose:
+        sys.stdout.write(driver_process.stdout)
+    if args.validate:
+        regex_str = r"==BEGIN +DUMP_ARRAYS==\n(?P<dump>(.|\n)*)==END +DUMP_ARRAYS=="
+        if interface == "std":
+            dump_strs[dataset] = re.search(regex_str, driver_process.stderr).group("dump")
+        else:
+            dump_str = re.search(regex_str, driver_process.stderr).group("dump")
+            if not dump_strs[dataset] == dump_str:
+                sys.stderr.write(f"Validation failed for kernel {kernel}_{dataset}{interfaces[interface]}\n")
+                sys.exit(1)
+    return measurements
+
+for kernel in args.kernels:
+    if args.verbose:
+        print(kernel)
+
+    dump_strs = {}
+    
+    for dataset in args.input_size:
+        for interface in args.interfaces:
+            for i in range(args.num_runs):
+                measurements[kernel][dataset][interface].append(run_kernel(kernel, interface, dataset, dump_strs))
 
 if not os.path.exists("measurements"):
     os.makedirs("measurements")
-for kernel in measurements_all:
-    measurements = measurements_all[kernel]
-    kernel_dir = os.path.join("measurements", kernel)
-    if not os.path.exists(kernel_dir):
-        os.makedirs(kernel_dir)
-    with open(f"{kernel_dir}/{datetime.now().strftime('%Y_%m_%d__%H:%M:%S')}.json", "w+") as f:
-        json.dump(measurements, f)    
+
+for kernel in args.kernels:
+    measurement_dir = os.path.join("measurements", kernel)
+    if not os.path.exists(measurement_dir):
+        os.makedirs(measurement_dir)
+    with open(f"{measurement_dir}/{datetime.now().strftime('%Y_%m_%d__%H:%M:%S')}.json", "w+") as f:
+        json.dump(measurements[kernel], f)
 
 sys.exit(0)

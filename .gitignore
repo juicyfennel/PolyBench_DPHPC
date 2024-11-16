@@ -16,6 +16,8 @@ config.mk
 
 # Measurements
 measurements/*
+.vscode
+
 
 # plots
 plots/*
