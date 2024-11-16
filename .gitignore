@@ -21,3 +21,13 @@ measurements/*
 
 # plots
 plots/*
+
+# For MacOS enjoyers
+.DS_Store
+
+# For pyenv enjoyers
+.python-version
+
+# MPI output files
+*.plist 
+*.yml
