@@ -79,6 +79,12 @@ parser.add_argument(
     default=["medium"],
 )
 parser.add_argument(
+    "--omp-threads",
+    type=int,
+    help="Number of OMP threads to run with (default=4)",
+    default=4,
+)
+parser.add_argument(
     "--mpi-processes",
     type=int,
     help="Number of MPI processes to run MPI with (default=4)",
@@ -200,11 +206,17 @@ def run_kernel(kernel, interface, dataset, dump_strs):
             str(args.mpi_processes),
             f"./{kernel}_{dataset}{interfaces[interface]}",
         ]
+    elif interface == "omp":
+        # Set OMP_NUM_THREADS environment variable
+        os.environ["OMP_NUM_THREADS"] = str(args.omp_threads)
+        cmd = [f"./{kernel}_{dataset}{interfaces[interface]}"]
     else:
         cmd = [f"./{kernel}_{dataset}{interfaces[interface]}"]
+
     driver_process = subprocess.run(
         cmd, cwd=kernels[kernel], capture_output=True, text=True
     )
+
     measurements = float(driver_process.stdout)
     if driver_process.returncode != 0:
         sys.stderr.write(
