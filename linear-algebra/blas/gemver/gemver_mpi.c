@@ -125,13 +125,13 @@ for (i = 0; i < size; i++) {
 
 if (rank == 0) {
     // Root process uses MPI_IN_PLACE
-    MPI_Gatherv(MPI_IN_PLACE, 0, MPI_DOUBLE,
-                &A[0][0], sendcounts, displs, MPI_DOUBLE,
+    MPI_Gatherv(MPI_IN_PLACE, 0, MPI_DATA_TYPE,
+                &A[0][0], sendcounts, displs, MPI_DATA_TYPE,
                 0, MPI_COMM_WORLD);
 } else {
     // Non-root processes send their portion
-    MPI_Gatherv(&A[start_row][0], sendcounts[rank], MPI_DOUBLE,
-                &A[0][0], sendcounts, displs, MPI_DOUBLE,
+    MPI_Gatherv(&A[start_row][0], sendcounts[rank], MPI_DATA_TYPE,
+                &A[0][0], sendcounts, displs, MPI_DATA_TYPE,
                 0, MPI_COMM_WORLD);
 }
 
@@ -160,7 +160,7 @@ for (int i = start_row; i < start_row+num_rows; ++i) {
 }
 
 // Step 4: Distribute x to all processes, meanwhile computing their value  
-MPI_Allreduce(local_x, x, n, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+MPI_Allreduce(local_x, x, n, MPI_DATA_TYPE, MPI_SUM, MPI_COMM_WORLD);
 
 // Check that x is computed corectly 
 // if (rank == 0) {
@@ -180,8 +180,8 @@ for (i = start_row; i < start_row + num_rows; i++) {
 }
 
 // Step 6: Gather the results of w into process 0
-MPI_Gather(local_w, num_rows, MPI_DOUBLE,
-         w, num_rows, MPI_DOUBLE,
+MPI_Gather(local_w, num_rows, MPI_DATA_TYPE,
+         w, num_rows, MPI_DATA_TYPE,
          0, MPI_COMM_WORLD);
 
 // if (rank == 0) {
