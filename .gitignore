@@ -27,3 +27,7 @@ plots/*
 
 # For pyenv enjoyers
 .python-version
+
+# MPI output files
+*.plist 
+*.yml

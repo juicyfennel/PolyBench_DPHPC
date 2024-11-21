@@ -50,11 +50,13 @@
 
 #ifdef DATA_TYPE_IS_INT
 #  define DATA_TYPE int
+#  define MPI_DATA_TYPE MPI_INT
 #  define DATA_PRINTF_MODIFIER "%d "
 #endif
 
 #ifdef DATA_TYPE_IS_FLOAT
 #  define DATA_TYPE float
+#  define MPI_DATA_TYPE MPI_FLOAT
 #  define DATA_PRINTF_MODIFIER "%0.2f "
 #  define SCALAR_VAL(x) x##f
 #  define SQRT_FUN(x) sqrtf(x)
@@ -64,6 +66,7 @@
 
 #ifdef DATA_TYPE_IS_DOUBLE
 #  define DATA_TYPE double
+#  define MPI_DATA_TYPE MPI_DOUBLE
 #  define DATA_PRINTF_MODIFIER "%0.2lf "
 #  define SCALAR_VAL(x) x
 #  define SQRT_FUN(x) sqrt(x)
