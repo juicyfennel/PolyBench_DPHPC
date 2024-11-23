@@ -39,13 +39,32 @@ kernels = {
     "seidel-2d": "./stencils/seidel-2d",
 }
 
-datasets = {
-    "mini": "-DMINI_DATASET",
-    "small": "-DSMALL_DATASET",
-    "medium": "-DMEDIUM_DATASET",
-    "large": "-DLARGE_DATASET",
-    "extralarge": "-DEXTRALARGE_DATASET",
+inputsizes = {
+    "jacobi-2d": [
+        {"TSTEPS": 100, "N": 1000},
+        {"TSTEPS": 500, "N": 2000},
+        {"TSTEPS": 1000, "N": 3000}
+    ],
+    "gemver": [
+        {"N": 1000},
+        {"N": 2000},
+        {"N": 3000}
+    ]
 }
+
+datasets = {}
+
+# generate filenames and inputsize flags
+for kernel, inputsizes in inputsizes.items():
+    datasets[kernel] = {}
+    for inputsize in inputsizes:
+        filename = f"{kernel}_"
+        flags = ""
+        for (flag, val) in inputsize.items():
+            filename += f"{flag}_{str(val)}_"
+            flags += f"-D{flag}={str(val)} "
+        filename = filename[:-1]
+        datasets[kernel][filename] = flags
 
 interfaces = {"std": "", "omp": "_omp", "mpi": "_mpi"}
 
@@ -70,13 +89,6 @@ parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output
 parser.add_argument("--num-runs", type=int, help="Number of runs", default=1)
 parser.add_argument(
     "--validate", action="store_true", help="Validate results against reference"
-)
-parser.add_argument(
-    "--input-size",
-    type=str,
-    nargs="+",
-    help="Input size for kernels (default = medium) (selection: 'mini', 'small', 'medium', 'large', 'extralarge')",
-    default=["medium"],
 )
 parser.add_argument(
      "--num-p",
@@ -126,14 +138,14 @@ if not args.no_gen:
 
         content += "\n\n"
 
-        for dataset in args.input_size:
+        for filename, inputsize_flags in datasets[kernel].items():
             for interface in args.interfaces:
-                content += f"{kernel}_{dataset}_{interface}: {kernel}.c {kernel}.h\n"
+                content += f"{filename}_{interface}: {kernel}.c {kernel}.h\n"
                 content += f"\t@mkdir -p bin\n\t${{VERBOSE}} "
                 content += f"${{MPI_CC}}" if interface == "mpi" else f"${{CC}}"
-                content += f" -o bin/{kernel}_{dataset}{interfaces[interface]} "
+                content += f" -o bin/{filename}{interfaces[interface]} "
                 content += f"{kernel}{interfaces[interface]}.c ${{CFLAGS}} -I. -I{utilities_path} "
-                content += f"{pb_source_path} {datasets[dataset]} ${{EXTRA_FLAGS}}"
+                content += f"{pb_source_path} {inputsize_flags} ${{EXTRA_FLAGS}}"
                 content += " -fopenmp" if interface == "omp" else ""
                 content += "\n\n"
         
@@ -155,9 +167,9 @@ if not args.no_make:
             print(kernel)
 
         make_cmd = ["make"]
-        for dataset in args.input_size:
+        for filename, _ in datasets[kernel].items():
             for interface in args.interfaces:
-                make_cmd.append(f"{kernel}_{dataset}_{interface}")
+                make_cmd.append(f"{filename}_{interface}")
                 make_process = subprocess.run(make_cmd, cwd=kernels[kernel], capture_output=True, text=True)
 
         if make_process.returncode != 0:
@@ -179,13 +191,13 @@ measurements = {}
 
 for kernel in args.kernels:
     measurements[kernel] = {}
-    for dataset in args.input_size:
-        measurements[kernel][dataset] = {}
+    for filename, _ in datasets[kernel].items():
+        measurements[kernel][filename] = {}
         for interface in args.interfaces:
-            measurements[kernel][dataset][interface] = []
+            measurements[kernel][filename][interface] = []
 
-def run_kernel(kernel, interface, dataset, dump_strs, cores=2):
-    cmd = [f"./bin/{kernel}_{dataset}{interfaces[interface]}"]
+def run_kernel(kernel, filename, interface, dump_strs, cores=2):
+    cmd = [f"./bin/{filename}{interfaces[interface]}"]
     if interface == "mpi":
         cmd = ["mpiexec", "-np", str(cores)] + cmd
     if interface == "omp":
@@ -194,7 +206,7 @@ def run_kernel(kernel, interface, dataset, dump_strs, cores=2):
     measurements = float(driver_process.stdout)
     if driver_process.returncode != 0:
         sys.stderr.write(
-            f"Error running driver for kernel {kernel}_{dataset}{interfaces[interface]}\n"
+            f"Error running driver for kernel {filename}{interfaces[interface]}\n"
         )
         sys.stderr.write(driver_process.stderr)
         sys.exit(1)
@@ -203,14 +215,12 @@ def run_kernel(kernel, interface, dataset, dump_strs, cores=2):
     if args.validate:
         regex_str = r"==BEGIN +DUMP_ARRAYS==\n(?P<dump>(.|\n)*)==END +DUMP_ARRAYS=="
         if interface == "std":
-            dump_strs[dataset] = re.search(regex_str, driver_process.stderr).group(
-                "dump"
-            )
+            dump_strs[filename] = re.search(regex_str, driver_process.stderr).group("dump")
         else:
             dump_str = re.search(regex_str, driver_process.stderr).group("dump")
-            if not dump_strs[dataset] == dump_str:
+            if not dump_strs[filename] == dump_str:
                 sys.stderr.write(
-                    f"Validation failed for kernel {kernel}_{dataset}{interfaces[interface]}\n"
+                    f"Validation failed for kernel {filename}{interfaces[interface]}\n"
                 )
                 sys.exit(1)
     return measurements
@@ -222,11 +232,11 @@ for kernel in args.kernels:
 
     dump_strs = {}
 
-    for dataset in args.input_size:
+    for filename, _ in datasets[kernel].items():
         for interface in args.interfaces:
             for i in range(args.num_runs):
-                measurements[kernel][dataset][interface].append(
-                    run_kernel(kernel, interface, dataset, dump_strs, args.num_p)
+                measurements[kernel][filename][interface].append(
+                    run_kernel(kernel, filename, interface, dump_strs, args.num_p)
                 )
 
 if not os.path.exists("measurements"):
