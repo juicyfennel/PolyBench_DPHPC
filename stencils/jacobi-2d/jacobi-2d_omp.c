@@ -3,7 +3,10 @@
 #include <string.h>
 #include <math.h>
 #include <omp.h>
+
+#if defined(__x86_64__)
 #include <immintrin.h>
+#endif
 
 /* Include polybench common header. */
 #include <polybench.h>
