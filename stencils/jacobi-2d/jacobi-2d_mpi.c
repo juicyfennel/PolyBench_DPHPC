@@ -83,14 +83,59 @@ static void kernel_jacobi_2d(int tsteps,
       s_right_col[i] = A[i][start_col + block_length - 1];
     }
 
+    // Block cols and rows to be received from other blocks
+    DATA_TYPE *r_top_row    = (DATA_TYPE*)calloc(block_length, sizeof(DATA_TYPE)); // to be received from upper block as top buffer
+    DATA_TYPE *r_bottom_row = (DATA_TYPE*)calloc(block_length, sizeof(DATA_TYPE)); // to be received from lower block as lower buffer
+    DATA_TYPE *r_left_col   = (DATA_TYPE*)calloc(block_height, sizeof(DATA_TYPE)); // to be received from left block as left buffer
+    DATA_TYPE *r_right_col  = (DATA_TYPE*)calloc(block_height, sizeof(DATA_TYPE)); // to be received from right block as right buffer
 
-    for (i = 1; i < _PB_N - 1; i++)
-      for (j = 1; j < _PB_N - 1; j++)
+    // Determine neighbors
+    int my_upper_neighbor = (p_row - 1) * col_procs + p_col;
+    int my_lower_neighbor = (p_row + 1) * col_procs + p_col;
+    int my_left_neighbor  = (p_row * col_procs) + p_col - 1;
+    int my_right_neighbor = (p_row * col_procs) + p_col + 1;
+
+    // Check for boundary conditions and set neighbors to MPI_PROC_NULL if they are out of bounds
+    if (p_row == 0)           my_upper_neighbor = MPI_PROC_NULL;
+    if (p_row == row_procs-1) my_lower_neighbor = MPI_PROC_NULL;
+    if (p_col == 0)           my_left_neighbor  = MPI_PROC_NULL;
+    if (p_col == col_procs-1) my_right_neighbor = MPI_PROC_NULL;
+
+    // Send and receive data
+    MPI_Request mpi_requests[8];
+    MPI_Isend(s_top_row,    block_length, MPI_DOUBLE, my_upper_neighbor, 9, MPI_COMM_WORLD, &mpi_requests[0]);
+    MPI_Isend(s_bottom_row, block_length, MPI_DOUBLE, my_lower_neighbor, 9, MPI_COMM_WORLD, &mpi_requests[1]);
+    MPI_Isend(s_right_col,  block_height, MPI_DOUBLE, my_right_neighbor, 9, MPI_COMM_WORLD, &mpi_requests[2]);
+    MPI_Isend(s_left_col,   block_height, MPI_DOUBLE, my_left_neighbor,  9, MPI_COMM_WORLD, &mpi_requests[3]);
+
+    MPI_Irecv(r_top_row,    block_length, MPI_DOUBLE, my_upper_neighbor, 9, MPI_COMM_WORLD, &mpi_requests[4]);
+    MPI_Irecv(r_bottom_row, block_length, MPI_DOUBLE, my_lower_neighbor, 9, MPI_COMM_WORLD, &mpi_requests[5]);
+    MPI_Irecv(r_right_col,  block_height, MPI_DOUBLE, my_right_neighbor, 9, MPI_COMM_WORLD, &mpi_requests[6]);
+    MPI_Irecv(r_left_col,   block_height, MPI_DOUBLE, my_left_neighbor,  9, MPI_COMM_WORLD, &mpi_requests[7]);
+
+    MPI_Waitall(8, mpi_requests, MPI_STATUSES_IGNORE);
+
+    // Update A matrix with received data
+    &A[start_row - 1][start_col]            = &r_top_row;
+    &A[start_row + block_height][start_col] = &r_bottom_row;
+    for (int i = start_row; i < start_row + block_height - 1; i++)
+    {
+      A[i][start_col - 1]            = r_left_col[i];
+      A[i][start_col + block_length] = r_right_col[i];
+    }
+
+    // Update B matrix
+    for (i = start_row; i < start_row + block_height; i++) {
+      for (j = start_col; j < start_col + block_length; j++) {
         B[i][j] = SCALAR_VAL(0.2) * (A[i][j] + A[i][j - 1] + A[i][1 + j] + A[1 + i][j] + A[i - 1][j]);
+      }
+    }
 
-    for (i = 1; i < _PB_N - 1; i++)
-      for (j = 1; j < _PB_N - 1; j++)
+    for (i = 1; i < _PB_N - 1; i++) {
+      for (j = 1; j < _PB_N - 1; j++) {
         A[i][j] = SCALAR_VAL(0.2) * (B[i][j] + B[i][j - 1] + B[i][1 + j] + B[1 + i][j] + B[i - 1][j]);
+      }
+    }
   }
 #pragma endscop
 }
