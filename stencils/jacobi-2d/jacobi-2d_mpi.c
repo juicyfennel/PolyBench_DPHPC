@@ -70,17 +70,17 @@ static void kernel_jacobi_2d(int tsteps,
   for (t = 0; t < _PB_TSTEPS; t++)
   {
     // Block rows to be sent to other blocks
-    DATA_TYPE *s_top_row = &A[start_col][start_row];                       // to be send to upper block as lower buffer
-    DATA_TYPE *s_bottom_row = &A[start_col + block_height - 1][start_row]; // to be send to lower block as top buffer
+    DATA_TYPE *s_top_row = &A[start_row][start_col];                       // to be send to upper block as lower buffer
+    DATA_TYPE *s_bottom_row = &A[start_row + block_height - 1][start_col]; // to be send to lower block as top buffer
 
     // Block cols to be sent to other blocks
-    DATA_TYPE s_left_row[block_length];
-    DATA_TYPE s_right_row[block_length];
+    DATA_TYPE s_left_col[block_length];
+    DATA_TYPE s_right_col[block_length];
     for (int i = start_row; i < start_row + block_height - 1; i++)
     {
       // Iterate over rows i={start_row...(start_row+block_height-1)} for A[start_row + i][...]
-      s_left_row[i] = A[i][start_col];
-      s_right_row[i] = A[i][start_col + block_length - 1];
+      s_left_col[i] = A[i][start_col];
+      s_right_col[i] = A[i][start_col + block_length - 1];
     }
 
 
