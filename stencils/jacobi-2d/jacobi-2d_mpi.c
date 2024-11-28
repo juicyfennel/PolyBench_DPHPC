@@ -116,8 +116,8 @@ static void kernel_jacobi_2d(int tsteps,
     MPI_Waitall(8, mpi_requests, MPI_STATUSES_IGNORE);
 
     // Update A matrix with received data
-    &A[start_row - 1][start_col]            = &r_top_row;
-    &A[start_row + block_height][start_col] = &r_bottom_row;
+    memcpy(A[start_row - 1], r_top_row, block_length * sizeof(DATA_TYPE));
+    memcpy(A[start_row + block_height], r_bottom_row, block_length * sizeof(DATA_TYPE));
     for (int i = start_row; i < start_row + block_height - 1; i++)
     {
       A[i][start_col - 1]            = r_left_col[i];
@@ -131,8 +131,8 @@ static void kernel_jacobi_2d(int tsteps,
       }
     }
 
-    for (i = 1; i < _PB_N - 1; i++) {
-      for (j = 1; j < _PB_N - 1; j++) {
+    for (i = start_row; i < start_row + block_height; i++) {
+      for (j = start_col; j < start_col + block_length; j++) {
         A[i][j] = SCALAR_VAL(0.2) * (B[i][j] + B[i][j - 1] + B[i][1 + j] + B[1 + i][j] + B[i - 1][j]);
       }
     }
@@ -158,7 +158,9 @@ int main(int argc, char **argv)
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
   MPI_Comm_size(MPI_COMM_WORLD, &size);
 
-  /* TODO: calculate number of row and col processes */
+  /* Calculate number of row and col processes */
+  int col_procs = sqrt(size); // Assuming a square grid of processes
+  int row_procs = size / col_procs;
 
   /* TODO: initialize arrays (remember to add 2 extra  rows and cols to accomodate overlap) */
 
@@ -169,11 +171,56 @@ int main(int argc, char **argv)
   polybench_start_instruments;
 
   /* Run kernel. */
-  kernel_jacobi_2d(tsteps, n, POLYBENCH_ARRAY(A), POLYBENCH_ARRAY(B), rank, size);
+  kernel_jacobi_2d(tsteps,
+                   n,
+                   POLYBENCH_ARRAY(A),
+                   POLYBENCH_ARRAY(B),
+                   rank,
+                   size,
+                   col_procs,
+                   row_procs);
 
   /* Stop and print timer. */
   polybench_stop_instruments;
   polybench_print_instruments;
+
+  DATA_TYPE **final_A = NULL;
+  if (rank == 0)
+  {
+    final_A = calloc(n * n, sizeof(DATA_TYPE)); // Full matrix on root
+  }
+  
+  // MPI_Gather Parameters
+  int block_length = n / col_procs;
+  int block_height = n / row_procs;
+
+  int *sendcounts = malloc(size * sizeof(int)); // Number of elements to send to each process
+  int *displs = malloc(size * sizeof(int));     // Displacement of each block in the receive buffer
+  for (int i = 0; i < size; i++)
+  {
+    int proc_row = i / col_procs; // Row of the process in the grid
+    int proc_col = i % col_procs; // Col of the process in the grid
+    sendcounts[i] = block_height * block_length; // Number of elements in each block
+    displs[i] = (proc_row * block_height * n) + (proc_col * block_length);
+  }
+
+  // Gather the blocks from all processes
+  MPI_Gatherv(&final_A[1][1],
+              block_height * block_length,
+              MPI_DOUBLE,
+              final_A,
+              sendcounts,
+              displs,
+              MPI_DOUBLE,
+              0,
+              MPI_COMM_WORLD);
+
+    // Print the final matrix
+    if (rank == 0)
+    {
+      print_array(n, final_A);
+      free(final_A);
+    }
 
   /* Prevent dead-code elimination. All live-out data must be printed
      by the function call in argument. */
