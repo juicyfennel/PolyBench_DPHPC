@@ -85,11 +85,10 @@ parser.add_argument(
 )
 parser.add_argument("--no-gen", action="store_true", help="Do not regenerate makefiles")
 parser.add_argument("--no-make", action="store_true", help="Do not run make")
+parser.add_argument("-no-gen-batch", action="store_true", help="Do not generate sbatch bash scripts")
+parser.add_argument("-no-batch", action="store_true", help="Do not schedule jobs in batch")
 parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output")
 parser.add_argument("--num-runs", type=int, help="Number of runs", default=1)
-parser.add_argument(
-    "--validate", action="store_true", help="Validate results against reference"
-)
 parser.add_argument(
      "--num-p",
      type=int,
@@ -180,75 +179,37 @@ if not args.no_make:
             sys.stdout.write(make_process.stdout)
 
 
-print(
-    "**************************************************\n"
-    "Running Kernels\n"
-    "**************************************************"
-)
+if not args.no_gen_batch:
+    print(
+        "**************************************************\n"
+        "Generating sbatch bash scripts\n"
+        "**************************************************"
+    )
+
+    for kernel in args.kernels:
+        for filename, inputsize_flags in datasets[kernel].items():
+            for interface in args.interfaces:
+                sbatch_script = f""
 
 
-measurements = {}
+if not args.no_batch:
+    print(
+        "**************************************************\n"
+        "Scheduling jobs in batch\n"
+        "**************************************************"
+    )
 
-for kernel in args.kernels:
-    measurements[kernel] = {}
-    for filename, _ in datasets[kernel].items():
-        measurements[kernel][filename] = {}
-        for interface in args.interfaces:
-            measurements[kernel][filename][interface] = []
-
-def run_kernel(kernel, filename, interface, dump_strs, cores=2):
-    cmd = [f"./bin/{filename}{interfaces[interface]}"]
-    if interface == "mpi":
-        cmd = ["mpiexec", "-np", str(cores)] + cmd
-    if interface == "omp":
-        os.environ["OMP_NUM_THREADS"] = str(cores)
-    driver_process = subprocess.run(cmd, cwd=kernels[kernel], capture_output=True, text=True)
-    measurements = float(driver_process.stdout)
-    if driver_process.returncode != 0:
-        sys.stderr.write(
-            f"Error running driver for kernel {filename}{interfaces[interface]}\n"
-        )
-        sys.stderr.write(driver_process.stderr)
-        sys.exit(1)
-    if args.verbose:
-        sys.stdout.write(driver_process.stdout)
-    if args.validate:
-        regex_str = r"==BEGIN +DUMP_ARRAYS==\n(?P<dump>(.|\n)*)==END +DUMP_ARRAYS=="
-        if interface == "std":
-            dump_strs[filename] = re.search(regex_str, driver_process.stderr).group("dump")
-        else:
-            dump_str = re.search(regex_str, driver_process.stderr).group("dump")
-            if not dump_strs[filename] == dump_str:
-                sys.stderr.write(
-                    f"Validation failed for kernel {filename}{interfaces[interface]}\n"
-                )
-                sys.exit(1)
-    return measurements
+    for kernel in args.kernels:
+        for filename, inputsize_flags in datasets[kernel].items():
+            for interface in args.interfaces:
+                for i in range(args.num_runs):
+                    cmd = ["sbatch", f"{filename}_{interface}.sh"]
+                    subprocess.run(cmd, cwd=kernels[kernel], capture_output=True, text=True)
+                    
 
 
-for kernel in args.kernels:
-    if args.verbose:
-        print(kernel)
 
-    dump_strs = {}
 
-    for filename, _ in datasets[kernel].items():
-        for interface in args.interfaces:
-            for i in range(args.num_runs):
-                measurements[kernel][filename][interface].append(
-                    run_kernel(kernel, filename, interface, dump_strs, args.num_p)
-                )
 
-if not os.path.exists("measurements"):
-    os.makedirs("measurements")
-
-for kernel in args.kernels:
-    measurement_dir = os.path.join("measurements", kernel)
-    if not os.path.exists(measurement_dir):
-        os.makedirs(measurement_dir)
-    with open(
-        f"{measurement_dir}/{datetime.now().strftime('%Y_%m_%d__%H:%M:%S')}.json", "w+"
-    ) as f:
-        json.dump(measurements[kernel], f)
 
 sys.exit(0)
