@@ -84,6 +84,26 @@ static void print_outer_array(int rank, // Rank of the process
   POLYBENCH_DUMP_FINISH;
 }
 
+/* DCE code. Must scan the entire live-out data.
+   Can be used also to check the correctness of the output. */
+static void print_res_array(int n,
+                        DATA_TYPE POLYBENCH_2D(A_res, N, N, n, n))
+
+{
+  POLYBENCH_DUMP_START;
+  POLYBENCH_DUMP_BEGIN("A\n");
+
+
+  for (int i = 0; i < n; i++) {
+    for (int j = 0; j < n; j++) {
+      fprintf(POLYBENCH_DUMP_TARGET, DATA_PRINTF_MODIFIER, A_res[i][j]);
+    }
+    fprintf(POLYBENCH_DUMP_TARGET, "\n");
+  }
+  POLYBENCH_DUMP_END("A");
+  POLYBENCH_DUMP_FINISH;
+}
+
 /* Main computational kernel. The whole function will be timed,
    including the call and return. */
 static void kernel_jacobi_2d(int tsteps,
@@ -165,26 +185,60 @@ static void kernel_jacobi_2d(int tsteps,
 #pragma endscop
 }
 
-
-
-/* DCE code. Must scan the entire live-out data.
-   Can be used also to check the correctness of the output. */
-static void print_res_array(int n,
-                        DATA_TYPE POLYBENCH_2D(A_res, N, N, n, n))
-
+/* Main computational kernel. The whole function will be timed,
+   including the call and return. */
+static void gather_results(int n,
+                          int block_height, // Height of the block
+                          int block_length, // Length of the block
+                          DATA_TYPE POLYBENCH_2D(A, block_height+2, block_length+2, block_height+2, block_length+2),
+                          DATA_TYPE POLYBENCH_2D(A_res, N, N, n, n),
+                          int rank,
+                          int size,
+                          MPI_Comm cart_comm)
 {
-  POLYBENCH_DUMP_START;
-  POLYBENCH_DUMP_BEGIN("A\n");
+  int *displs = NULL;
+  int *recv_counts = NULL;
 
+  if (rank == 0) {
+    recv_counts = malloc(size * sizeof(int));
+    displs = malloc(size * sizeof(int));
 
-  for (int i = 0; i < n; i++) {
-    for (int j = 0; j < n; j++) {
-      fprintf(POLYBENCH_DUMP_TARGET, DATA_PRINTF_MODIFIER, A_res[i][j]);
+    // Calculate displacements for each block
+    for (int i = 0; i < size; i++) {
+        int proc_coords[2];
+        MPI_Cart_coords(cart_comm, i, 2, proc_coords);
+        int global_start_row = proc_coords[0] * block_height + 1;
+        int global_start_col = proc_coords[1] * block_length + 1;
+        displs[i] = global_start_row * N + global_start_col; // Flattened index for subarray
+        recv_counts[i] = 1; // Each process sends one inner block
     }
-    fprintf(POLYBENCH_DUMP_TARGET, "\n");
   }
-  POLYBENCH_DUMP_END("A");
-  POLYBENCH_DUMP_FINISH;
+
+  int coords[2];
+  MPI_Cart_coords(cart_comm, rank, 2, coords);
+
+  MPI_Datatype block_type, res_block_type;
+  MPI_Type_vector(block_height, block_length, block_length + 2, MPI_DOUBLE, &block_type);
+  MPI_Type_commit(&block_type);
+
+  int sizes[2] = {N, N}; // Size of the global matrix
+  int subsizes[2] = {block_height, block_length}; // Size of the block
+  int starts[2] = {coords[0] * block_height + 1, coords[1] * block_length + 1}; // Starting position of the block
+  MPI_Type_create_subarray(2, sizes, subsizes, starts, MPI_ORDER_C, MPI_DOUBLE, &res_block_type);
+  MPI_Type_commit(&res_block_type);
+
+  MPI_Gatherv(&A[1][1],
+              1,
+              block_type,
+              rank == 0 ? A_res : NULL,
+              rank == 0 ? recv_counts : NULL,
+              rank == 0 ? displs : NULL,
+              res_block_type,
+              0,
+              MPI_COMM_WORLD);
+
+  MPI_Type_free(&block_type);
+  MPI_Type_free(&res_block_type);
 }
 
 int main(int argc, char **argv)
@@ -260,58 +314,20 @@ int main(int argc, char **argv)
 
   // // Gather all data in rank 0
 
-  double (*A_res)[N][N];
-  int *displs = NULL;
-  int *recv_counts = NULL;
-
-  if (rank == 0) {
+  double (*A_res)[N][N] = NULL;
+  if(rank == 0) {
     A_res = (double(*)[N][N])malloc((N) * (N) * sizeof(double));
-
-    init_res_array(n,
-              POLYBENCH_ARRAY(A_res));
-
-    recv_counts = malloc(size * sizeof(int));
-    displs = malloc(size * sizeof(int));
-
-    // Calculate displacements for each block
-    for (int i = 0; i < size; i++) {
-        int proc_coords[2];
-        MPI_Cart_coords(cart_comm, i, 2, proc_coords);
-        int global_start_row = proc_coords[0] * block_height + 1;
-        int global_start_col = proc_coords[1] * block_length + 1;
-        displs[i] = global_start_row * N + global_start_col; // Flattened index for subarray
-        recv_counts[i] = 1; // Each process sends one inner block
-    }
+    init_res_array(n, POLYBENCH_ARRAY(A_res));
   }
 
-  int coords[2];
-  MPI_Cart_coords(cart_comm, rank, 2, coords);
-
-  MPI_Datatype block_type, res_block_type;
-  MPI_Type_vector(block_height, block_length, block_length + 2, MPI_DOUBLE, &block_type);
-  MPI_Type_commit(&block_type);
-
-  int sizes[2] = {N, N}; // Size of the global matrix
-  int subsizes[2] = {block_height, block_length}; // Size of the block
-  int starts[2] = {coords[0] * block_height + 1, coords[1] * block_length + 1}; // Starting position of the block
-  MPI_Type_create_subarray(2, sizes, subsizes, starts, MPI_ORDER_C, MPI_DOUBLE, &res_block_type);
-  MPI_Type_commit(&res_block_type);
-
-  print_outer_array(rank, block_height, block_length, POLYBENCH_ARRAY(A));
-
-  // printf("A[1][1]: %f\n", *A[1][1]);
-
-  MPI_Gatherv(&A[1][1],
-              1,
-              block_type,
-              rank == 0 ? A_res : NULL,
-              rank == 0 ? recv_counts : NULL,
-              rank == 0 ? displs : NULL,
-              res_block_type,
-              0,
-              MPI_COMM_WORLD);
-
-  
+  gather_results(n,
+                block_height,
+                block_length,
+                POLYBENCH_ARRAY(A),
+                POLYBENCH_ARRAY(A_res),
+                rank,
+                size,
+                cart_comm);
   
   if (rank == 0) {
     polybench_prevent_dce(print_res_array(n, POLYBENCH_ARRAY(A_res)));
@@ -322,9 +338,6 @@ int main(int argc, char **argv)
   /* Be clean. */
   POLYBENCH_FREE_ARRAY(A);
   POLYBENCH_FREE_ARRAY(B);
-
-  // MPI_Type_free(&block_type);
-  // MPI_Type_free(&res_block_type);
 
   MPI_Finalize();
 
