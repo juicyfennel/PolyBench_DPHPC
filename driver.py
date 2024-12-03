@@ -128,7 +128,10 @@ if not args.no_gen:
 
         for dataset in args.input_size:
             for interface in args.interfaces:
-                content += f"{kernel}_{dataset}_{interface}: {kernel}.c {kernel}.h\n"
+                if interface != "std":
+                    content += f"{kernel}_{dataset}_{interface}: {kernel}_{interface}.c {kernel}.h\n"
+                else:
+                    content += f"{kernel}_{dataset}_{interface}: {kernel}.c {kernel}.h\n"
                 content += f"\t@mkdir -p bin\n\t${{VERBOSE}} "
                 content += f"${{MPI_CC}}" if interface == "mpi" else f"${{CC}}"
                 content += f" -o bin/{kernel}_{dataset}{interfaces[interface]} "
