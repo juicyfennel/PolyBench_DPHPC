@@ -22,9 +22,9 @@ DATA_TYPE *v1,
 DATA_TYPE *u2,
 DATA_TYPE *v2,
 DATA_TYPE *w,
+DATA_TYPE *x,
 DATA_TYPE *y,
 DATA_TYPE *z,
-DATA_TYPE *local_x,
 int start_row,
 int num_rows)
 {
@@ -39,7 +39,7 @@ for (i = 0; i < n; i++)
 {
 v1[i] = ((i+1)/fn)/4.0;
 v2[i] = ((i+1)/fn)/6.0;
-local_x[i] = 0.0;
+x[i] = 0.0;
 }
 for(i=start_row;i<start_row+num_rows;i++){
    u1[i-start_row] = i;
@@ -87,7 +87,6 @@ DATA_TYPE *w,
 DATA_TYPE *x,
 DATA_TYPE *y,
 DATA_TYPE *z,
-DATA_TYPE *local_x,
 int start_row, 
 int num_rows)
 {
@@ -110,16 +109,16 @@ for (i = start_row; i < start_row + num_rows; ++i) {
 
 for (i = 0; i < n; i++) {
    for (int j = start_row; j < start_row + num_rows; ++j) {
-      local_x[i] += beta * A[j-start_row][i] * y[j-start_row]; 
+      x[i] += beta * A[j-start_row][i] * y[j-start_row]; 
    }
 }
 
 for (int i = start_row; i < start_row+num_rows; ++i) {
-   local_x[i] += z[i-start_row];
+   x[i] += z[i-start_row];
 }
 
 // Step 5: Distribute x to all processes, meanwhile computing their value  
-MPI_Allreduce(local_x, x, n, MPI_DATA_TYPE, MPI_SUM, MPI_COMM_WORLD);
+MPI_Allreduce(MPI_IN_PLACE, x, n, MPI_DATA_TYPE, MPI_SUM, MPI_COMM_WORLD);
 
 // Check that x is computed corectly 
 // if (rank == 0) {
@@ -174,7 +173,6 @@ int main(int argc, char** argv)
    POLYBENCH_1D_ARRAY_DECL(x, DATA_TYPE, N, n);
    POLYBENCH_1D_ARRAY_DECL(y, DATA_TYPE, num_rows, n);
    POLYBENCH_1D_ARRAY_DECL(z, DATA_TYPE, num_rows, n);
-   POLYBENCH_1D_ARRAY_DECL(local_x, DATA_TYPE, N, n); // because allReduce is used, we need to have 2 arrays for x otherwise reduce then Bcast but more bandwidth
 
 
    /* Initialize array(s). */
@@ -186,9 +184,9 @@ int main(int argc, char** argv)
                POLYBENCH_ARRAY(u2),
                POLYBENCH_ARRAY(v2),
                POLYBENCH_ARRAY(w),
+               POLYBENCH_ARRAY(x),
                POLYBENCH_ARRAY(y),
                POLYBENCH_ARRAY(z),
-               POLYBENCH_ARRAY(local_x),
                start_row, num_rows);
    
    /* Start timer. */
@@ -205,7 +203,6 @@ int main(int argc, char** argv)
                   POLYBENCH_ARRAY(x),
                   POLYBENCH_ARRAY(y),
                   POLYBENCH_ARRAY(z),
-                  POLYBENCH_ARRAY(local_x),
                   start_row, num_rows);
 
    /* Stop and print timer. */
@@ -266,12 +263,12 @@ int main(int argc, char** argv)
 
    polybench_stop_instruments;
 
+   //ONLY FOR RANK 0 PRINT 
    if (rank == 0) {
       printf("Time for Gather: ");
       polybench_print_instruments;
    }
 
-   // ONLY FOR RANK 0 PRINT 
    // if (rank == 0) {
    //    printf("Gathered A:\n");
    //    for (int i = 0; i < n; i++) {
@@ -313,7 +310,6 @@ int main(int argc, char** argv)
    POLYBENCH_FREE_ARRAY(x);
    POLYBENCH_FREE_ARRAY(y);
    POLYBENCH_FREE_ARRAY(z);
-   POLYBENCH_FREE_ARRAY(local_x);
    POLYBENCH_FREE_ARRAY(sendcounts);
    POLYBENCH_FREE_ARRAY(displs);
 
