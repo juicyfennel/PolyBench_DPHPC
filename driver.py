@@ -283,6 +283,12 @@ def run(datasets, on_euler):
 
     date = datetime.now().strftime("%Y_%m_%d__%H-%M-%S")
 
+    output_dir = os.path.join("outputs", date)
+    os.makedirs(output_dir, exist_ok=True)
+
+    with open(os.path.join(output_dir, "inputsizes.json"), "w") as f:
+        json.dump(inputsizes, f, indent=4)
+
     for kernel in args.kernels:
         if args.verbose:
             print(kernel)
@@ -291,19 +297,24 @@ def run(datasets, on_euler):
                 if args.verbose:
                     print(interface)
 
-                output_dir = os.path.join("outputs", date, f"{kernel}_{interface}")
-                out_dir = os.path.join(output_dir, "out")
-                err_dir = os.path.join(output_dir, "err")
+                out_dir = os.path.join(output_dir, f"{kernel}_{interface}", "out")
+                err_dir = os.path.join(output_dir, f"{kernel}_{interface}", "err")
 
                 os.makedirs(out_dir, exist_ok=True)
                 os.makedirs(err_dir, exist_ok=True)
 
                 if interface == "omp":
-                    with open(os.path.join(output_dir, "omp.json"), "w") as f:
+                    with open(
+                        os.path.join(output_dir, f"{kernel}_{interface}", "omp.json"),
+                        "w",
+                    ) as f:
                         json.dump(omp_config, f, indent=4)
 
                 if interface == "mpi":
-                    with open(os.path.join(output_dir, "mpi.json"), "w") as f:
+                    with open(
+                        os.path.join(output_dir, f"{kernel}_{interface}", "mpi.json"),
+                        "w",
+                    ) as f:
                         json.dump(mpi_config, f, indent=4)
 
                 # Local
@@ -337,7 +348,8 @@ def main():
     if not args.no_compile:
         compile(datasets)
 
-    run(datasets, on_euler)
+    if args.kernels:
+        run(datasets, on_euler)
 
 
 # pass
