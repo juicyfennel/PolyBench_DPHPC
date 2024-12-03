@@ -36,4 +36,4 @@ plots/*
 outputs/*
 
 # For Euler enjoyers
-.sbatch
+*.sbatch
