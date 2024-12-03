@@ -1,7 +1,6 @@
 import argparse
 import json
 import os
-import re
 import subprocess
 import sys
 from datetime import datetime
@@ -39,15 +38,33 @@ kernels = {
     "seidel-2d": "./stencils/seidel-2d",
 }
 
-datasets = {
-    "mini": "-DMINI_DATASET",
-    "small": "-DSMALL_DATASET",
-    "medium": "-DMEDIUM_DATASET",
-    "large": "-DLARGE_DATASET",
-    "extralarge": "-DEXTRALARGE_DATASET",
+inputsizes = {
+    "jacobi-2d": [
+        {"TSTEPS": 100, "N": 1000},
+        {"TSTEPS": 500, "N": 2000},
+        {"TSTEPS": 1000, "N": 3000},
+    ],
+    "gemver": [{"N": 1000}],
 }
 
+
 interfaces = {"std": "", "omp": "_omp", "mpi": "_mpi"}
+
+# Look into affinity, for now this is fine
+
+omp_config = {
+    "num_threads": 8,
+    "mem_per_thread": 8000,  # Guest users can only use up to 128GB of data
+    "places": "cores",  # OMP_PLACES: cores (no hyperthreading) | threads (logical threads) | sockets | numa_domains
+    "proc_bind": "close",  # spread (spread out around threads/cores/sockets/NUMA domains) | close (as much as possible close to thread/core/same NUMA domains)
+}
+
+mpi_config = {
+    "num_processes": 10,  # Guest users can only use up to 48 processors
+    "nodes": 3,
+    "mem_per_process": 400,
+}
+
 
 parser = argparse.ArgumentParser(description="Python script that wraps PolyBench")
 parser.add_argument(
@@ -57,6 +74,7 @@ parser.add_argument(
     help="Kernels to run (default = all)",
     default=kernels.keys(),
 )
+
 parser.add_argument(
     "--interfaces",
     type=str,
@@ -64,53 +82,35 @@ parser.add_argument(
     help="Interfaces to run (default = all) (selection: 'std', 'omp', 'mpi')",
     default=["std", "omp", "mpi"],
 )
-parser.add_argument("--no-gen", action="store_true", help="Do not regenerate makefiles")
-parser.add_argument("--no-make", action="store_true", help="Do not run make")
+
+parser.add_argument(
+    "--no-compile", action="store_true", help="Generate makefiles and compile"
+)
+
+parser.add_argument(
+    "--num-runs",
+    type=int,
+    help="Number of times to run the program",
+    default=1,
+)
+
+
 parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output")
-parser.add_argument("--num-runs", type=int, help="Number of runs", default=1)
-parser.add_argument(
-    "--validate", action="store_true", help="Validate results against reference"
-)
-parser.add_argument(
-    "--input-size",
-    type=str,
-    nargs="+",
-    help="Input size for kernels (default = medium) (selection: 'mini', 'small', 'medium', 'large', 'extralarge')",
-    default=["medium"],
-)
-parser.add_argument(
-    "--omp-threads",
-    type=int,
-    help="Number of OMP threads to run with (default=4)",
-    default=4,
-)
-parser.add_argument(
-    "--mpi-processes",
-    type=int,
-    help="Number of MPI processes to run MPI with (default=4)",
-    default=4,
-)
 
 args = parser.parse_args()
 
-# Make sure the standard kernel is ran first if validation is enabled
-if args.validate:
-    if "std" in args.interfaces:
-        args.interfaces.remove("std")
-    args.interfaces.insert(0, "std")
 
-if not args.no_gen:
+# # compile
+def compile(datasets):
     print(
         "**************************************************\n"
         "Generating makefiles\n"
         "**************************************************"
     )
 
-    lm_flag = ["cholesky", "gramschmidt", "correlation"]
+    lm_flag = ["cholesky", "gramschmidt", "correlation", "jacobi-2d"]
 
     extra_flags = ""
-    if args.validate:
-        extra_flags += " -DPOLYBENCH_DUMP_ARRAYS"
 
     for kernel in args.kernels:
         if args.verbose:
@@ -132,30 +132,22 @@ if not args.no_gen:
 
         content += "\n\n"
 
-        for dataset in args.input_size:
-            content += f"{kernel}_{dataset}: {kernel}.c {kernel}.h\n"
+        for filename, inputsize_flags in datasets[kernel].items():
             for interface in args.interfaces:
-                if interface == "mpi":
-                    content += f"\t${{VERBOSE}} ${{MPI_CC}} -o {kernel}_{dataset}{interfaces[interface]} "
-                else:
-                    content += f"\t${{VERBOSE}} ${{CC}} -o {kernel}_{dataset}{interfaces[interface]} "
+                content += f"{filename}_{interface}: {kernel}{interfaces[interface]}.c {kernel}.h\n"
+                content += "\t@mkdir -p bin\n\t${VERBOSE} "
+                content += "${MPI_CC}" if interface == "mpi" else "${CC}"
+                content += f" -o bin/{filename}{interfaces[interface]} "
                 content += f"{kernel}{interfaces[interface]}.c ${{CFLAGS}} -I. -I{utilities_path} "
-                content += f"{pb_source_path} {datasets[dataset]} ${{EXTRA_FLAGS}}"
-                if interface == "omp":
-                    content += " -fopenmp"
+                content += f"{pb_source_path} {inputsize_flags} ${{EXTRA_FLAGS}}"
+                content += " -fopenmp" if interface == "omp" else ""
                 content += "\n\n"
 
-        content += "clean:\n\t@ rm -f "
-        for interface in interfaces:
-            for dataset in datasets:
-                content += f"{kernel}_{dataset}{interfaces[interface]} "
-        content += "\n\n"
+        content += "clean:\n\t@ rm -f bin/*\n\n"
 
         with open(os.path.join(kernels[kernel], "Makefile"), "w") as makefile:
             makefile.write(content)
 
-
-if not args.no_make:
     print(
         "**************************************************\n"
         "Running make\n"
@@ -167,11 +159,12 @@ if not args.no_make:
             print(kernel)
 
         make_cmd = ["make"]
-        for dataset in args.input_size:
-            make_cmd.append(f"{kernel}_{dataset}")
-            make_process = subprocess.run(
-                make_cmd, cwd=kernels[kernel], capture_output=True, text=True
-            )
+        for filename, _ in datasets[kernel].items():
+            for interface in args.interfaces:
+                make_cmd.append(f"{filename}_{interface}")
+                make_process = subprocess.run(
+                    make_cmd, cwd=kernels[kernel], capture_output=True, text=True
+                )
 
         if make_process.returncode != 0:
             sys.stderr.write(f"Error running make for kernel {kernel}\n")
@@ -181,90 +174,172 @@ if not args.no_make:
             sys.stdout.write(make_process.stdout)
 
 
-print(
-    "**************************************************\n"
-    "Running Kernels\n"
-    "**************************************************"
-)
+def run_local(kernel, interface, filename, out_dir, err_dir):
+    for i in range(args.num_runs):
+        cmd = [os.path.join(".", "bin", f"{filename}{interfaces[interface]}")]
+        if interface == "mpi":
+            cmd = ["mpiexec", "-np", str(mpi_config["num_processes"])] + cmd
+        elif interface == "omp":
+            os.environ["OMP_NUM_THREADS"] = str(omp_config["num_threads"])
+
+        with (
+            open(os.path.join(out_dir, f"{i}.out"), "w") as out,
+            open(os.path.join(err_dir, f"{i}.err"), "w") as err,
+        ):
+            driver_process = subprocess.run(
+                cmd,
+                cwd=kernels[kernel],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+
+            # Write output to files
+            out.write(driver_process.stdout)
+            err.write(driver_process.stderr)
+
+            # If verbose, write to sys.stdout and sys.stderr
+            if args.verbose:
+                sys.stdout.write(driver_process.stdout)
+                sys.stderr.write(driver_process.stderr)
+
+        if driver_process.returncode != 0:
+            sys.stderr.write(
+                f"Error running driver for kernel {filename}{interfaces[interface]}\n"
+            )
+            sys.stderr.write(driver_process.stderr)
+            sys.exit(1)
 
 
-measurements = {}
+def run_euler(kernel, interface, filename, out_dir, err_dir):
+    # date = datetime.now().strftime("%Y_%m_%d__%H:%M:%S")
 
-for kernel in args.kernels:
-    measurements[kernel] = {}
-    for dataset in args.input_size:
-        measurements[kernel][dataset] = {}
-        for interface in args.interfaces:
-            measurements[kernel][dataset][interface] = []
+    sbatch_dir = os.path.join(kernels[kernel], "sbatch")
+    os.makedirs(sbatch_dir, exist_ok=True)
 
+    # Prepare paths and job name
+    binary_path = os.path.join(
+        kernels[kernel], "bin", f"{filename}{interfaces[interface]}"
+    )
+    sbatch_file = os.path.join(sbatch_dir, f"{filename}{interfaces[interface]}.sbatch")
 
-def run_kernel(kernel, interface, dataset, dump_strs):
+    content = "#!/bin/bash\n"
+    content += "#SBATCH --time=00:02:00\n"
+    content += f"#SBATCH -o ./{out_dir}/%j.out\n"
+    content += f"#SBATCH -e ./{err_dir}/%j.err\n"
+
     if interface == "mpi":
-        cmd = [
-            "mpiexec",
-            "-np",
-            str(args.mpi_processes),
-            f"./{kernel}_{dataset}{interfaces[interface]}",
-        ]
-    elif interface == "omp":
-        # Set OMP_NUM_THREADS environment variable
-        os.environ["OMP_NUM_THREADS"] = str(args.omp_threads)
-        cmd = [f"./{kernel}_{dataset}{interfaces[interface]}"]
-    else:
-        cmd = [f"./{kernel}_{dataset}{interfaces[interface]}"]
+        content += f"#SBATCH --nodes={mpi_config['nodes']}\n"
+        content += f"#SBATCH --ntasks={mpi_config['num_processes']}\n"
+        content += f"#SBATCH --mem-per-cpu={mpi_config['mem_per_process']}\n"
+        content += "#SBATCH -C ib\n\n"
 
-    driver_process = subprocess.run(
-        cmd, cwd=kernels[kernel], capture_output=True, text=True
+    elif interface == "omp":
+        content += "#SBATCH --nodes=1\n"
+        content += "#SBATCH --ntasks=1\n"
+        content += f"#SBATCH --cpus-per-task={omp_config['num_threads']}\n"
+        content += f"#SBATCH --mem-per-cpu={omp_config['mem_per_thread']}\n\n"
+
+        content += f"export OMP_NUM_THREADS={omp_config['num_threads']}\n"
+        content += f"export OMP_PLACES={omp_config['places']}\n"
+        content += f"export OMP_PROC_BIND={omp_config['proc_bind']}\n\n"
+    else:
+        content += "#SBATCH --nodes=1\n"
+        content += "#SBATCH --ntasks=1\n"
+        content += "#SBATCH --mem-per-cpu=20000\n\n"
+
+    content += (
+        "module load stack/2024-06 openmpi/4.1.6 openblas/0.3.24 2> /dev/null\n\n"
     )
 
-    measurements = float(driver_process.stdout)
-    if driver_process.returncode != 0:
-        sys.stderr.write(
-            f"Error running driver for kernel {kernel}_{dataset}{interfaces[interface]}\n"
+    if interface == "mpi":
+        content += "srun "
+
+    content += binary_path
+
+    with open(sbatch_file, "w") as file:
+        file.write(content)
+
+        if args.verbose:
+            print(f"Sbatch file generated: {sbatch_file}")
+
+    # Submit sbatch files
+    for _ in range(args.num_runs):
+        submission = subprocess.run(
+            ["sbatch", sbatch_file], capture_output=True, text=True
         )
-        sys.stderr.write(driver_process.stderr)
-        sys.exit(1)
-    if args.verbose:
-        sys.stdout.write(driver_process.stdout)
-    if args.validate:
-        regex_str = r"==BEGIN +DUMP_ARRAYS==\n(?P<dump>(.|\n)*)==END +DUMP_ARRAYS=="
-        if interface == "std":
-            dump_strs[dataset] = re.search(regex_str, driver_process.stderr).group(
-                "dump"
-            )
-        else:
-            dump_str = re.search(regex_str, driver_process.stderr).group("dump")
-            if not dump_strs[dataset] == dump_str:
-                sys.stderr.write(
-                    f"Validation failed for kernel {kernel}_{dataset}{interfaces[interface]}\n"
-                )
-                sys.exit(1)
-    return measurements
+        print(submission.stdout)
+        if submission.returncode != 0:
+            print(f"Error submitting job: {submission.stderr}")
+            sys.exit(1)
 
 
-for kernel in args.kernels:
-    if args.verbose:
-        print(kernel)
+def run(datasets, on_euler):
+    print(
+        "**************************************************\n"
+        f"Running Kernels {'locally' if not on_euler else 'on Euler'}\n"
+        "**************************************************"
+    )
 
-    dump_strs = {}
+    date = datetime.now().strftime("%Y_%m_%d__%H-%M-%S")
 
-    for dataset in args.input_size:
-        for interface in args.interfaces:
-            for i in range(args.num_runs):
-                measurements[kernel][dataset][interface].append(
-                    run_kernel(kernel, interface, dataset, dump_strs)
-                )
+    for kernel in args.kernels:
+        if args.verbose:
+            print(kernel)
+        for filename, _ in datasets[kernel].items():
+            for interface in args.interfaces:
+                if args.verbose:
+                    print(interface)
 
-if not os.path.exists("measurements"):
-    os.makedirs("measurements")
+                output_dir = os.path.join("outputs", date, f"{kernel}_{interface}")
+                out_dir = os.path.join(output_dir, "out")
+                err_dir = os.path.join(output_dir, "err")
 
-for kernel in args.kernels:
-    measurement_dir = os.path.join("measurements", kernel)
-    if not os.path.exists(measurement_dir):
-        os.makedirs(measurement_dir)
-    with open(
-        f"{measurement_dir}/{datetime.now().strftime('%Y_%m_%d__%H:%M:%S')}.json", "w+"
-    ) as f:
-        json.dump(measurements[kernel], f)
+                os.makedirs(out_dir, exist_ok=True)
+                os.makedirs(err_dir, exist_ok=True)
 
-sys.exit(0)
+                if interface == "omp":
+                    with open(os.path.join(output_dir, "omp.json"), "w") as f:
+                        json.dump(omp_config, f, indent=4)
+
+                if interface == "mpi":
+                    with open(os.path.join(output_dir, "mpi.json"), "w") as f:
+                        json.dump(mpi_config, f, indent=4)
+
+                # Local
+                if on_euler:
+                    run_euler(kernel, interface, filename, out_dir, err_dir)
+                # Euler
+                else:
+                    run_local(kernel, interface, filename, out_dir, err_dir)
+                    # run_local()
+
+
+def main():
+    datasets = {}
+
+    # Generate necessary compiler flags based on datasets to test
+    for kernel, sizes in inputsizes.items():
+        datasets[kernel] = {}
+        for inputsize in sizes:
+            filename = f"{kernel}_"
+            flags = ""
+            for flag, val in inputsize.items():
+                filename += f"{flag}_{str(val)}_"
+                flags += f"-D{flag}={str(val)} "
+            filename = filename[:-1]
+            datasets[kernel][filename] = flags
+
+    # Detect cluster
+    cwd = os.getcwd()
+    on_euler = cwd.startswith("/cluster/")
+
+    if not args.no_compile:
+        compile(datasets)
+
+    run(datasets, on_euler)
+
+
+# pass
+if __name__ == "__main__":
+    main()
