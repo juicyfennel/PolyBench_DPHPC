@@ -305,14 +305,14 @@ def run(datasets, on_euler):
 
                 if interface == "omp":
                     with open(
-                        os.path.join(output_dir, f"{kernel}_{interface}", "omp.json"),
+                        os.path.join(output_dir, "omp.json"),
                         "w",
                     ) as f:
                         json.dump(omp_config, f, indent=4)
 
                 if interface == "mpi":
                     with open(
-                        os.path.join(output_dir, f"{kernel}_{interface}", "mpi.json"),
+                        os.path.join(output_dir, "mpi.json"),
                         "w",
                     ) as f:
                         json.dump(mpi_config, f, indent=4)
