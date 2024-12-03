@@ -44,8 +44,6 @@
 #  define POLYBENCH_ENABLE_INTARRAY_PAD
 # endif
 
-extern double polybench_t_start;
-extern double polybench_t_end;
 
 /* C99 arrays in function prototype. By default, do not use. */
 # ifdef POLYBENCH_USE_C99_PROTO
