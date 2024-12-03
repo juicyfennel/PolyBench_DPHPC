@@ -211,19 +211,9 @@ int main(int argc, char** argv)
    /* Stop and print timer. */
    polybench_stop_instruments;
 
-   //step 7: get kernel times of all processes in root process
-   double *kernel_times = NULL;
-   double kernel_time = polybench_t_end - polybench_t_start;
-   if(rank == 0){
-      kernel_times = (double *)malloc(size * sizeof(double));
-      kernel_times[0] = kernel_time;
-      MPI_Gather(MPI_IN_PLACE, 0, MPI_DATATYPE_NULL, kernel_times, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-   }
-   else{
-      MPI_Gather(&kernel_time, 1, MPI_DOUBLE, kernel_times, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-   }
-
-   // Step 8: Gather the computed A and w in rank 0
+   printf("Rank %d, Time for Kernel calculation: ", rank);
+   polybench_print_instruments;
+   // Step 7: Gather the computed A and w in rank 0
    polybench_start_instruments;
 
    POLYBENCH_1D_ARRAY_DECL(sendcounts, int, size, size);
@@ -277,11 +267,7 @@ int main(int argc, char** argv)
    polybench_stop_instruments;
 
    if (rank == 0) {
-      printf("Time for Kernel calculation: ");
-      for(int i=0;i<size;i++){
-         printf("%.6f ", kernel_times[i]);
-      }
-      printf("\nTime for Gather: ");
+      printf("Time for Gather: ");
       polybench_print_instruments;
    }
 
