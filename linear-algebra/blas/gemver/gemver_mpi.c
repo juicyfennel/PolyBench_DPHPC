@@ -211,7 +211,21 @@ int main(int argc, char** argv)
    /* Stop and print timer. */
    polybench_stop_instruments;
 
-   // Step 7: Gather the computed A and w in rank 0
+   //step 7: get kernel times of all processes in root process
+   double *kernel_times = NULL;
+   double kernel_time = polybench_t_end - polybench_t_start;
+   if(rank == 0){
+      kernel_times = (double *)malloc(size * sizeof(double));
+      kernel_times[0] = kernel_time;
+      MPI_Gather(MPI_IN_PLACE, 0, MPI_DATATYPE_NULL, kernel_times, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+   }
+   else{
+      MPI_Gather(&kernel_time, 1, MPI_DOUBLE, kernel_times, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+   }
+
+   // Step 8: Gather the computed A and w in rank 0
+   polybench_start_instruments;
+
    POLYBENCH_1D_ARRAY_DECL(sendcounts, int, size, size);
    POLYBENCH_1D_ARRAY_DECL(displs, int, size, size);
    int offset = 0;
@@ -260,6 +274,17 @@ int main(int argc, char** argv)
                   0, MPI_COMM_WORLD);
    }
 
+   polybench_stop_instruments;
+
+   if (rank == 0) {
+      printf("Time for Kernel calculation: ");
+      for(int i=0;i<size;i++){
+         printf("%.6f ", kernel_times[i]);
+      }
+      printf("\nTime for Gather: ");
+      polybench_print_instruments;
+   }
+
    // ONLY FOR RANK 0 PRINT 
    // if (rank == 0) {
    //    printf("Gathered A:\n");
@@ -284,8 +309,8 @@ int main(int argc, char** argv)
    //    }
    //    printf("\n");
    // }
-   // TODO: print all timers and do some statistics on 'em
-   if (rank == 0) polybench_print_instruments;
+   
+   
    
 
    /* Prevent dead-code elimination. All live-out data must be printed
