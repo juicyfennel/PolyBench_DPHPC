@@ -196,46 +196,35 @@ static void gather_results(int n,
                           int size,
                           MPI_Comm cart_comm)
 {
-  int *displs = NULL;
-  int *recv_counts = NULL;
-
-  if (rank == 0) {
-    recv_counts = malloc(size * sizeof(int));
-    displs = malloc(size * sizeof(int));
-
-    // Calculate displacements for each block
-    for (int i = 0; i < size; i++) {
-        int proc_coords[2];
-        MPI_Cart_coords(cart_comm, i, 2, proc_coords);
-        int global_start_row = proc_coords[0] * block_height + 1;
-        int global_start_col = proc_coords[1] * block_length + 1;
-        displs[i] = global_start_row * N + global_start_col; // Flattened index for subarray
-        recv_counts[i] = 1; // Each process sends one inner block
-    }
-  }
-
   int coords[2];
   MPI_Cart_coords(cart_comm, rank, 2, coords);
 
   MPI_Datatype block_type, res_block_type;
   MPI_Type_vector(block_height, block_length, block_length + 2, MPI_DOUBLE, &block_type);
   MPI_Type_commit(&block_type);
-
-  int sizes[2] = {N, N}; // Size of the global matrix
-  int subsizes[2] = {block_height, block_length}; // Size of the block
-  int starts[2] = {coords[0] * block_height + 1, coords[1] * block_length + 1}; // Starting position of the block
-  MPI_Type_create_subarray(2, sizes, subsizes, starts, MPI_ORDER_C, MPI_DOUBLE, &res_block_type);
+  
+  MPI_Type_vector(block_height, block_length, N, MPI_DOUBLE, &res_block_type);
   MPI_Type_commit(&res_block_type);
 
-  MPI_Gatherv(&A[1][1],
-              1,
-              block_type,
-              rank == 0 ? A_res : NULL,
-              rank == 0 ? recv_counts : NULL,
-              rank == 0 ? displs : NULL,
-              res_block_type,
-              0,
-              MPI_COMM_WORLD);
+  if (rank != 0) {
+    MPI_Send(&A[1][1], 1, block_type, 0, 0, cart_comm);
+  } else {
+    MPI_Request receive_requests[size];
+    for (int i = 1; i < size; i++) {
+      int proc_coords[2];
+      MPI_Cart_coords(cart_comm, i, 2, proc_coords);
+      int row = proc_coords[0] * block_height + 1;
+      int col = proc_coords[1] * block_length + 1;
+      MPI_Irecv(&A_res[row][col], 1, res_block_type, i, 0, cart_comm, &receive_requests[i-1]);
+    }
+
+    for (int i = 1; i < block_height+2; i++)
+      for (int j = 1; j < block_length+2; j++)
+        A_res[i][j] = A[i][j];
+    
+    MPI_Waitall(size-1, receive_requests, MPI_STATUSES_IGNORE);
+  }
+
 
   MPI_Type_free(&block_type);
   MPI_Type_free(&res_block_type);
@@ -331,7 +320,7 @@ int main(int argc, char **argv)
   
   if (rank == 0) {
     polybench_prevent_dce(print_res_array(n, POLYBENCH_ARRAY(A_res)));
-    free(A_res);
+    free((void*)A_res);
   }
 
 
