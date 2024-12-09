@@ -297,8 +297,8 @@ def run(datasets, on_euler):
                 if args.verbose:
                     print(interface)
 
-                out_dir = os.path.join(output_dir, f"{kernel}_{interface}", "out")
-                err_dir = os.path.join(output_dir, f"{kernel}_{interface}", "err")
+                out_dir = os.path.join(output_dir, f"{filename}_{interface}", "out")
+                err_dir = os.path.join(output_dir, f"{filename}_{interface}", "err")
 
                 os.makedirs(out_dir, exist_ok=True)
                 os.makedirs(err_dir, exist_ok=True)
