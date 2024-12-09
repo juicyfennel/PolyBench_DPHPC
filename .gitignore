@@ -31,3 +31,9 @@ plots/*
 # MPI output files
 *.plist 
 *.yml
+
+# For output enjoyers
+outputs/*
+
+# For Euler enjoyers
+*.sbatch
