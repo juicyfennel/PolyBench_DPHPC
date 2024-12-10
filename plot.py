@@ -57,6 +57,7 @@ def np_plot(bm, kernel, df):
         os.makedirs(f"./outputs/{bm}/plots")
 
     plt.savefig(f"./outputs/{bm}/plots/{kernel}_np.png")
+    plt.savefig(f"./outputs/{bm}/plots/{kernel}_np.svg")
 
 
 def dataset_plot(bm, kernel, df):
@@ -86,6 +87,7 @@ def dataset_plot(bm, kernel, df):
         os.makedirs(f"./outputs/{bm}/plots")
 
     plt.savefig(f"./outputs/{bm}/plots/{kernel}_datasets.png")
+    plt.savefig(f"./outputs/{bm}/plots/{kernel}_datasets.svg")
 
 
 for bm in benchmark_outputs:
