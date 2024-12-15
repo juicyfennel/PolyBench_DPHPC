@@ -1,74 +1,129 @@
 import argparse
 import os
-import json
-import pandas as pd
-import seaborn as sns
+from datetime import datetime
+
 import matplotlib.pyplot as plt
 import numpy as np
-from datetime import datetime
+import pandas as pd
+import seaborn as sns
 
 # Argument parser to take the kernel as input
 parser = argparse.ArgumentParser(description="Plot execution times for a given kernel")
-parser.add_argument("kernel", type=str, help="Base name of the kernel (e.g., 'gemver')")
+parser.add_argument(
+    "--all",
+    action="store_true",
+    help="Plot all measurements from ./outputs (default: latest only)",
+)
+parser.add_argument(
+    "--type", type=str, default="all", help="Type of plot to generate (default: np)"
+)
 args = parser.parse_args()
 
 # Construct the directory path for the given kernel
-kernel_dir = os.path.join("measurements", args.kernel)
+output_dir = "./outputs"
 
 # Check if the directory exists
-if not os.path.exists(kernel_dir):
-    print(f"Error: The directory {kernel_dir} does not exist.")
+if not os.path.exists(output_dir):
+    print("Error: The directory ./outputs does not exist.")
     exit(1)
 
-# Get the list of JSON files in the directory
-json_files = [f for f in os.listdir(kernel_dir) if f.endswith(".json")]
-if not json_files:
-    print(f"Error: No JSON files found in {kernel_dir}")
-    exit(1)
+# List containing all folders in ./outputs
+benchmark_outputs = [
+    f for f in os.listdir(output_dir) if os.path.isdir(os.path.join(output_dir, f))
+]
 
-# Find the latest JSON file based on the timestamp in the filename
-latest_file = max(json_files, key=lambda f: datetime.strptime(f.split(".")[0], "%Y_%m_%d__%H:%M:%S"))
-latest_file_path = os.path.join(kernel_dir, latest_file)
+# If --all flag is not provided, plot only latest measurements
+if not args.all:
+    # Get the latest folder based on the timestamp in the folder name
+    latest_folder = max(
+        benchmark_outputs, key=lambda f: datetime.strptime(f, "%Y_%m_%d__%H-%M-%S")
+    )
+    benchmark_outputs = [latest_folder]
 
-# Load the data from the latest JSON file
-with open(latest_file_path, "r") as file:
-    data = json.load(file)
 
-# Convert JSON data to a DataFrame for plotting
-rows = []
-for dataset, kernels in data.items():
-    for version, times in kernels.items():
-        for time in times:
-            rows.append({"Dataset": dataset, "Kernel Version": version, "Execution Time": time})
+def np_plot(bm, kernel, df):
+    plt.figure(figsize=(12, 8))
+    sns.set_theme(style="whitegrid")
+    # Line plot with confidence interval for the median
+    sns.lineplot(
+        x="np",
+        y="Max Execution Time",
+        hue="Interface",
+        data=df,
+        estimator=np.median,  # dk if median or mean is better
+        errorbar=("ci", 95),  # 95% confidence interval
+        n_boot=1000,  # Number of bootstrap samples
+    )
+    # Set the axis labels and title
+    plt.xlabel("Input Size", fontsize=12)
+    plt.ylabel("Execution Time [s]", fontsize=12)
+    plt.title(
+        f"Execution Times for {kernel} Across Different Parallelization Paradigms and Input Sizes",
+        fontsize=14,
+    )
+    plt.xticks(rotation=45)  # Rotate x-axis labels for better readability
+    plt.legend(title="Paradigm", fontsize=10)
 
-df = pd.DataFrame(rows)
+    plt.tight_layout()
 
-# Create the plot
-plt.figure(figsize=(12, 8))
-sns.set(style="whitegrid")
+    # Save the plot to a file
+    if not os.path.exists(f"./outputs/{bm}/plots"):
+        os.makedirs(f"./outputs/{bm}/plots")
 
-# Line plot with confidence interval for the median
-sns.lineplot(
-    x="Dataset",
-    y="Execution Time",
-    hue="Kernel Version",
-    data=df,
-    estimator=np.median,  # dk if median or mean is better
-    ci=95,  # 95% confidence interval
-    n_boot=1000  # Number of bootstrap samples
-)
+    plt.savefig(f"./outputs/{bm}/plots/{kernel}_np.png")
+    plt.savefig(f"./outputs/{bm}/plots/{kernel}_np.svg")
 
-# Set the axis labels and title
-plt.xlabel("Dataset Size", fontsize=12)
-plt.ylabel("Execution Time (seconds)", fontsize=12)
-plt.title(f"Execution Time Comparison for {args.kernel} Across Different Versions and Dataset Sizes", fontsize=14)
-plt.xticks(rotation=45)  # Rotate x-axis labels for better readability
-plt.legend(title="Kernel Version", fontsize=10)
 
-# Set fixed y-axis steps
-y_min, y_max = df["Execution Time"].min(), df["Execution Time"].max()
-plt.yticks(np.arange(y_min, y_max + 0.025, 0.025))
+def dataset_plot(bm, kernel, df):
+    plt.figure(figsize=(12, 8))
+    sns.set_theme(style="whitegrid")
+    # Line plot with confidence interval for the median
+    sns.lineplot(
+        x="Dataset",
+        y="Max Execution Time",
+        hue="Interface",
+        data=df,
+        estimator=np.median,  # dk if median or mean is better
+        errorbar=("ci", 95),  # 95% confidence interval
+        n_boot=1000,  # Number of bootstrap samples
+    )
+    # Set the axis labels and title
+    plt.xlabel("Input Size", fontsize=12)
+    plt.ylabel("Execution Time [s]", fontsize=12)
+    plt.title(
+        f"Execution Times for {kernel} Across Different Parallelization Paradigms and Input Sizes",
+        fontsize=14,
+    )
+    plt.xticks(rotation=45)  # Rotate x-axis labels for better readability
+    plt.legend(title="Paradigm", fontsize=10)
 
-# Show the plot
-plt.tight_layout()
-plt.show()
+    plt.tight_layout()
+
+    # Save the plot to a file
+    if not os.path.exists(f"./outputs/{bm}/plots"):
+        os.makedirs(f"./outputs/{bm}/plots")
+
+    plt.savefig(f"./outputs/{bm}/plots/{kernel}_datasets.png")
+    plt.savefig(f"./outputs/{bm}/plots/{kernel}_datasets.svg")
+
+
+for bm in benchmark_outputs:
+    dfs = {}
+    csv_files = [f for f in os.listdir(f"./outputs/{bm}/data") if f.endswith(".csv")]
+
+    for csv_file in csv_files:
+        # Read the CSV file into a DataFrame
+        df = pd.read_csv(f"./outputs/{bm}/data/{csv_file}")
+        # Extract the kernel name from the CSV file name
+        kernel = csv_file.split(".")[0]
+        # Add the DataFrame to the dictionary
+        dfs[kernel] = df
+
+    for kernel, df in dfs.items():
+        if args.type == "np" or args.type == "all":
+            np_plot(bm, kernel, df)
+
+        if args.type == "dataset" or args.type == "all":
+            dataset_plot(bm, kernel, df)
+
+    exit(0)

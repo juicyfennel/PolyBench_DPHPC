@@ -37,3 +37,6 @@ outputs/*
 
 # For Euler enjoyers
 *.sbatch
+
+
+saved_runs/*
