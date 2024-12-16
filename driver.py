@@ -164,7 +164,7 @@ def compile(datasets):
             sys.stdout.write(make_process.stdout)
 
 
-def run_local(kernel, interface, p, filename, out_dir, err_dir, hostname_dir):
+def run_local(kernel, interface, p, filename, out_dir_run):
     for i in range(args.num_runs):
         cmd = [os.path.join(".", "bin", f"{filename}{interfaces[interface]}")]
         if interface == "mpi":
@@ -173,8 +173,8 @@ def run_local(kernel, interface, p, filename, out_dir, err_dir, hostname_dir):
             os.environ["OMP_NUM_THREADS"] = str(p)
 
         with (
-            open(os.path.join(out_dir, f"{i}.out"), "w") as out,
-            open(os.path.join(err_dir, f"{i}.err"), "w") as err,
+            open(os.path.join(out_dir_run, f"{i}.out"), "w") as out,
+            open(os.path.join(out_dir_run, f"{i}.err"), "w") as err,
         ):
             driver_process = subprocess.run(
                 cmd,
@@ -201,7 +201,7 @@ def run_local(kernel, interface, p, filename, out_dir, err_dir, hostname_dir):
             sys.exit(1)
 
 
-def run_euler(kernel, interface, p, filename, out_dir, err_dir, hostname_dir):
+def run_euler(kernel, interface, p, filename, out_dir_run):
     # date = datetime.now().strftime("%Y_%m_%d__%H:%M:%S")
 
     sbatch_dir = os.path.join(kernels[kernel], "sbatch")
@@ -215,8 +215,8 @@ def run_euler(kernel, interface, p, filename, out_dir, err_dir, hostname_dir):
 
     content = "#!/bin/bash\n"
     content += "#SBATCH --time=00:04:00\n"
-    content += f"#SBATCH -o ./{out_dir}/%j.out\n"
-    content += f"#SBATCH -e ./{err_dir}/%j.err\n"
+    content += f"#SBATCH -o ./{out_dir_run}/%j.out\n"
+    content += f"#SBATCH -e ./{out_dir_run}/%j.err\n"
     # content += "#SBATCH --mem-bind=local\n"
 
     nodelist = [f"eu-g9-0{i+1:02}-{j+1}" for i in range(48) for j in range(4)]
@@ -255,9 +255,11 @@ def run_euler(kernel, interface, p, filename, out_dir, err_dir, hostname_dir):
         content += "srun "
 
     content += "perf stat " + binary_path + "\n"
-    content += "done\n"
+    content += 'echo "==============="\n'  # stdout
+    content += 'echo "===============" >&2\n'  # stderr
+    content += "done\n\n"
 
-    content += f"srun hostname > ./{hostname_dir}/${{SLURM_JOB_ID}}.txt\n"
+    content += f"srun hostname > ./{out_dir_run}/hostname.txt\n"
 
     # content += (
     #     f"for i in {{1..{args.num_runs}}}; do\n"
@@ -320,20 +322,11 @@ def run(datasets, on_euler):
                     if interface == "std" and p != 1 or interface != "std" and p == 1:
                         continue
 
-                    out_dir = os.path.join(
-                        output_dir, f"{filename}_np_{p}_{interface}", "out"
-                    )
-                    err_dir = os.path.join(
-                        output_dir, f"{filename}_np_{p}_{interface}", "err"
+                    out_dir_run = os.path.join(
+                        output_dir, f"{filename}_np_{p}_{interface}"
                     )
 
-                    hostname_dir = os.path.join(
-                        output_dir, f"{filename}_np_{p}_{interface}", "hostname"
-                    )
-
-                    os.makedirs(out_dir, exist_ok=True)
-                    os.makedirs(err_dir, exist_ok=True)
-                    os.makedirs(hostname_dir, exist_ok=True)
+                    os.makedirs(out_dir_run, exist_ok=True)
 
                     if interface == "omp":
                         with open(
@@ -356,9 +349,7 @@ def run(datasets, on_euler):
                             interface,
                             p,
                             filename,
-                            out_dir,
-                            err_dir,
-                            hostname_dir,
+                            out_dir_run,
                         )
                     # Euler
                     else:
@@ -367,9 +358,7 @@ def run(datasets, on_euler):
                             interface,
                             p,
                             filename,
-                            out_dir,
-                            err_dir,
-                            hostname_dir,
+                            out_dir_run,
                         )
                         # run_local()
 
