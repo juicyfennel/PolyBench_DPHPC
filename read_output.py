@@ -37,7 +37,7 @@ for bm in benchmark_outputs:
     
     for dir in dirs:
         # Retrieve the kernel, datasets, and interface from the directory name
-        pattern = r"^(?P<kernel>[A-Za-z0-9-]+)_((?P<datasets>(?:\w+_\w+_)*)?)(?P<interface>\w+)$"
+        pattern = r"^(?P<kernel>[A-Za-z0-9-]+)_((?P<datasets>(?:\w+_\w+_)*)?)(?P<interface>[\w+]+)$"
         match = re.match(pattern, dir)
 
         if not match:
