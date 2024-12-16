@@ -84,6 +84,7 @@ args = parser.parse_args()
 if args.size:
     inputsizes["gemver"] = [{"N": args.size}]
 
+
 # # compile
 def compile(datasets):
     print(
@@ -128,7 +129,10 @@ def compile(datasets):
                 content += " -fopenmp" if interface == "omp" else ""
                 content += "\n\n"
 
-        content += "clean:\n\t@ rm -f bin/*\n\n"
+        content += "clean:\n"
+        for filename, inputsize_flags in datasets[kernel].items():
+            for interface in args.interfaces:
+                content += f"\t@rm -f bin/{filename}{interfaces[interface]}\n"
 
         with open(os.path.join(kernels[kernel], "Makefile"), "w") as makefile:
             makefile.write(content)
@@ -247,17 +251,9 @@ def run_euler(kernel, interface, p, filename, out_dir, err_dir, hostname_dir):
 
     content += f"for i in {{1..{args.num_runs}}}; do\n"
     if interface == "mpi":
-        content += (
-            "srun perf stat -e cycles,instructions,cache-misses,context-switches,cpu-migrations,dTLB-load-misses,iTLB-load-misses "
-            + binary_path
-            + "\n"
-        )
-    else:
-        content += (
-            "perf stat -e cycles,instructions,cache-misses,context-switches,cpu-migrations,dTLB-load-misses,iTLB-load-misses "
-            + binary_path
-            + "\n"
-        )
+        content += "srun "
+
+    content += "perf stat " + binary_path + "\n"
     content += "done\n"
 
     content += f"srun hostname > ./{hostname_dir}/${{SLURM_JOB_ID}}.txt\n"
@@ -306,6 +302,7 @@ def run(datasets, on_euler):
         output_dir = os.path.join("outputs/euler", date)
     else:
         output_dir = os.path.join("outputs/local", date)
+
     os.makedirs(output_dir, exist_ok=True)
 
     with open(os.path.join(output_dir, "inputsizes.json"), "w") as f:
@@ -397,6 +394,7 @@ def main():
 
     if not args.no_compile:
         compile(datasets)
+    # return
 
     if args.kernels:
         run(datasets, on_euler)
