@@ -1,74 +1,98 @@
-import argparse
-import os
-import json
 import pandas as pd
-import seaborn as sns
 import matplotlib.pyplot as plt
 import numpy as np
-from datetime import datetime
+import argparse
+import os
 
-# Argument parser to take the kernel as input
-parser = argparse.ArgumentParser(description="Plot execution times for a given kernel")
-parser.add_argument("kernel", type=str, help="Base name of the kernel (e.g., 'gemver')")
+# Argument parser
+parser = argparse.ArgumentParser(description="Plot runtime analysis from a CSV file")
+parser.add_argument(
+    "--file", required=True, help="Path to the runtime_analysis.csv file"
+)
 args = parser.parse_args()
 
-# Construct the directory path for the given kernel
-kernel_dir = os.path.join("measurements", args.kernel)
-
-# Check if the directory exists
-if not os.path.exists(kernel_dir):
-    print(f"Error: The directory {kernel_dir} does not exist.")
+# Validate the input file
+if not os.path.exists(args.file):
+    print(f"Error: File {args.file} does not exist.")
     exit(1)
 
-# Get the list of JSON files in the directory
-json_files = [f for f in os.listdir(kernel_dir) if f.endswith(".json")]
-if not json_files:
-    print(f"Error: No JSON files found in {kernel_dir}")
+# Load the CSV data
+df = pd.read_csv(args.file)
+
+# Extract the problem size
+if "Size" not in df.columns:
+    print("Error: 'Size' column not found in the CSV.")
     exit(1)
+problem_size = df["Size"].iloc[0]  # Assumes all rows have the same size
+print(f"Problem Size: {problem_size}")
 
-# Find the latest JSON file based on the timestamp in the filename
-latest_file = max(json_files, key=lambda f: datetime.strptime(f.split(".")[0], "%Y_%m_%d__%H:%M:%S"))
-latest_file_path = os.path.join(kernel_dir, latest_file)
-
-# Load the data from the latest JSON file
-with open(latest_file_path, "r") as file:
-    data = json.load(file)
-
-# Convert JSON data to a DataFrame for plotting
-rows = []
-for dataset, kernels in data.items():
-    for version, times in kernels.items():
-        for time in times:
-            rows.append({"Dataset": dataset, "Kernel Version": version, "Execution Time": time})
-
-df = pd.DataFrame(rows)
-
-# Create the plot
-plt.figure(figsize=(12, 8))
-sns.set(style="whitegrid")
-
-# Line plot with confidence interval for the median
-sns.lineplot(
-    x="Dataset",
-    y="Execution Time",
-    hue="Kernel Version",
-    data=df,
-    estimator=np.median,  # dk if median or mean is better
-    ci=95,  # 95% confidence interval
-    n_boot=1000  # Number of bootstrap samples
+# Group by Kernel, Size, Processes, and Type to compute averages
+df_grouped = (
+    df.groupby(["Kernel", "Size", "Processes", "Type"])
+    .agg(
+        {
+            "Max Runtime": "mean",  # Average runtime
+            "STD": "mean",  # Average standard deviation
+        }
+    )
+    .reset_index()
 )
 
-# Set the axis labels and title
-plt.xlabel("Dataset Size", fontsize=12)
-plt.ylabel("Execution Time (seconds)", fontsize=12)
-plt.title(f"Execution Time Comparison for {args.kernel} Across Different Versions and Dataset Sizes", fontsize=14)
-plt.xticks(rotation=45)  # Rotate x-axis labels for better readability
-plt.legend(title="Kernel Version", fontsize=10)
+# Calculate Speedup and Efficiency
+baseline_runtime = df_grouped[
+    (df_grouped["Processes"] == 1) & (df_grouped["Type"] == "std")
+]["Max Runtime"].mean()
+if pd.isna(baseline_runtime):
+    print("Error: Could not find baseline runtime for standard (std) runs.")
+    exit(1)
 
-# Set fixed y-axis steps
-y_min, y_max = df["Execution Time"].min(), df["Execution Time"].max()
-plt.yticks(np.arange(y_min, y_max + 0.025, 0.025))
+df_grouped["Speedup"] = baseline_runtime / df_grouped["Max Runtime"]
+df_grouped["Efficiency"] = df_grouped["Speedup"] / df_grouped["Processes"]
 
-# Show the plot
-plt.tight_layout()
+# Plot Runtime vs Number of Processes
+plt.figure(figsize=(10, 6))
+for t in df_grouped["Type"].unique():
+    subset = df_grouped[df_grouped["Type"] == t].sort_values(by="Processes")
+    plt.errorbar(
+        subset["Processes"],
+        subset["Max Runtime"],
+        yerr=subset["STD"],
+        label=t,
+        marker="o",
+    )
+plt.xlabel("Number of Processes")
+plt.ylabel("Runtime (s)")
+plt.title(f"Runtime vs Number of Processes (Size={problem_size})")
+plt.legend(title="Type")
+plt.grid()
+plt.show()
+
+# Plot Speedup vs Number of Processes
+plt.figure(figsize=(10, 6))
+for t in df_grouped["Type"].unique():
+    subset = df_grouped[df_grouped["Type"] == t].sort_values(by="Processes")
+    plt.plot(subset["Processes"], subset["Speedup"], label=t, marker="o")
+plt.plot(
+    df_grouped["Processes"].unique(),
+    df_grouped["Processes"].unique(),
+    "k--",
+    label="Ideal Speedup",
+)
+plt.xlabel("Number of Processes")
+plt.ylabel("Speedup")
+plt.title(f"Speedup vs Number of Processes (Size={problem_size})")
+plt.legend(title="Type")
+plt.grid()
+plt.show()
+
+# Plot Efficiency vs Number of Processes
+plt.figure(figsize=(10, 6))
+for t in df_grouped["Type"].unique():
+    subset = df_grouped[df_grouped["Type"] == t].sort_values(by="Processes")
+    plt.plot(subset["Processes"], subset["Efficiency"], label=t, marker="o")
+plt.xlabel("Number of Processes")
+plt.ylabel("Efficiency")
+plt.title(f"Efficiency vs Number of Processes (Size={problem_size})")
+plt.legend(title="Type")
+plt.grid()
 plt.show()

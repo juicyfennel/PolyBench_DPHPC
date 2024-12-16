@@ -37,3 +37,9 @@ outputs/*
 
 # For Euler enjoyers
 *.sbatch
+
+# Runs both local and Euler
+myRuns
+
+# csv files
+runtime_analysis

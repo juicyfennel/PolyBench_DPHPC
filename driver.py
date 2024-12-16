@@ -38,10 +38,12 @@ kernels = {
     "seidel-2d": "./stencils/seidel-2d",
 }
 
+
 inputsizes = {
-    "jacobi-2d": [{"TSTEPS": 5, "N": 20000}],
-    "gemver": [{"N": 30000}],
+    "jacobi-2d": [{"TSTEPS": 500, "N": 3362}],
+    "gemver": [{"N": 40000}],
 }
+
 
 # Number of processes to test, always include 1 if you want to test the serial version
 num_processes = [1, 2, 4]  # MAX 48
@@ -63,7 +65,7 @@ omp_config = {
 mpi_config = {
     "num_processes": num_processes,  # Guest users can only use up to 48 processors
     "nodes": 2,
-    "total_memory": 15000,
+    "total_memory": 60000,
 }
 
 
@@ -98,8 +100,17 @@ parser.add_argument(
 
 parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output")
 
+parser.add_argument(
+    "--size",
+    type=int,
+    help="Input size for the kernel (e.g., 10000, 25000, 40000)",
+    default=None,
+)
+
 args = parser.parse_args()
 
+if args.size:
+    inputsizes["gemver"] = [{"N": args.size}]
 
 # # compile
 def compile(datasets):
