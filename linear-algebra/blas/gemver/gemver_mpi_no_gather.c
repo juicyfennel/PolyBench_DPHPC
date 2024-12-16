@@ -113,7 +113,7 @@ for (i = 0; i < n; i++) {
    }
 }
 
-for (int i = start_row; i < start_row+num_rows; ++i) {
+for (i = start_row; i < start_row+num_rows; ++i) {
    x[i] += z[i-start_row];
 }
 
