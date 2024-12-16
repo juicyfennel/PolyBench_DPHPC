@@ -39,3 +39,6 @@ outputs/*
 
 # For runtime_analysis
 runtime_analysis/*
+
+# Runs both local and Euler
+myRuns/*
