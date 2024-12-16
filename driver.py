@@ -49,7 +49,7 @@ inputsizes = {
 num_processes = [1, 4, 9, 16, 25, 36, 48] # MAX 48
 
 
-interfaces = {"std": "", "omp": "_omp", "mpi": "_mpi"}
+interfaces = {"std": "", "omp": "_omp", "mpi": "_mpi", "omp+mpi": "_omp+mpi"}
 
 # Look into affinity, for now this is fine
 
@@ -81,7 +81,7 @@ parser.add_argument(
     type=str,
     nargs="+",
     help="Interfaces to run (default = all) (selection: 'std', 'omp', 'mpi')",
-    default=["std", "omp", "mpi"],
+    default=["std", "omp", "mpi", "omp+mpi"]
 )
 
 parser.add_argument(
@@ -137,7 +137,7 @@ def compile(datasets):
             for interface in args.interfaces:
                 content += f"{filename}_{interface}: {kernel}{interfaces[interface]}.c {kernel}.h\n"
                 content += "\t@mkdir -p bin\n\t${VERBOSE} "
-                content += "${MPI_CC}" if interface == "mpi" else "${CC}"
+                content += "${MPI_CC}" if "mpi" in interface else "${CC}"
                 content += f" -o bin/{filename}{interfaces[interface]} "
                 content += f"{kernel}{interfaces[interface]}.c ${{CFLAGS}} -I. -I{utilities_path} "
                 content += f"{pb_source_path} {inputsize_flags} ${{EXTRA_FLAGS}}"
@@ -178,10 +178,10 @@ def compile(datasets):
 def run_local(kernel, interface, p, filename, out_dir, err_dir):
     for i in range(args.num_runs):
         cmd = [os.path.join(".", "bin", f"{filename}{interfaces[interface]}")]
-        if interface == "mpi":
-            cmd = ["mpiexec", "-np", str(p)] + cmd
-        elif interface == "omp":
+        if "omp" in interface:
             os.environ["OMP_NUM_THREADS"] = str(p)
+        if "mpi" in interface:
+            cmd = ["mpiexec", "-np", str(p)] + cmd
 
         with (
             open(os.path.join(out_dir, f"{i}.out"), "w") as out,
@@ -228,32 +228,33 @@ def run_euler(kernel, interface, p, filename, out_dir, err_dir):
     content += "#SBATCH --time=00:02:00\n"
     content += f"#SBATCH -o ./{out_dir}/%j.out\n"
     content += f"#SBATCH -e ./{err_dir}/%j.err\n"
-
-    if interface == "mpi":
+    
+    if "mpi" in interface: # interfaces "mpi" or "omp+mpi"
         content += f"#SBATCH --nodes={mpi_config['nodes']}\n"
         content += f"#SBATCH --ntasks={p}\n"
         content += f"#SBATCH --mem-per-cpu={mpi_config['mem_per_process']}\n"
         content += "#SBATCH -C ib\n\n"
-
     elif interface == "omp":
         content += "#SBATCH --nodes=1\n"
         content += "#SBATCH --ntasks=1\n"
         content += f"#SBATCH --cpus-per-task={p}\n"
         content += f"#SBATCH --mem-per-cpu={omp_config['mem_per_thread']}\n\n"
-
-        content += f"export OMP_NUM_THREADS={p}\n"
-        content += f"export OMP_PLACES={omp_config['places']}\n"
-        content += f"export OMP_PROC_BIND={omp_config['proc_bind']}\n\n"
     else:
         content += "#SBATCH --nodes=1\n"
         content += "#SBATCH --ntasks=1\n"
         content += "#SBATCH --mem-per-cpu=2000\n\n"
+    
+    # Only add the following if interface is "omp" or "omp+mpi"
+    if "omp" in interface:
+        content += f"export OMP_NUM_THREADS={p}\n"
+        content += f"export OMP_PLACES={omp_config['places']}\n"
+        content += f"export OMP_PROC_BIND={omp_config['proc_bind']}\n\n"
 
     content += (
         "module load stack/2024-06 openmpi/4.1.6 openblas/0.3.24 2> /dev/null\n\n"
     )
 
-    if interface == "mpi":
+    if "mpi" in interface:
         content += "srun "
 
     content += binary_path
@@ -322,6 +323,14 @@ def run(datasets, on_euler):
                             "w",
                         ) as f:
                             json.dump(mpi_config, f, indent=4)
+                            
+                    if interface == "omp+mpi":
+                        dump = {**omp_config, **mpi_config}
+                        with open(
+                            os.path.join(output_dir, "omp+mpi.json"),
+                            "w",
+                        ) as f:
+                            json.dump(dump, f, indent=4)
 
                     # Local
                     if on_euler:
