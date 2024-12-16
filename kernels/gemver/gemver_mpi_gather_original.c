@@ -208,7 +208,7 @@ int main(int argc, char** argv)
    /* Stop and print timer. */
    polybench_stop_instruments;
 
-   printf("Rank %d, Time for Kernel calculation: ", rank);
+   printf("Rank %d, Time: ", rank);
    polybench_print_instruments;
    // Step 7: Gather the computed A and w in rank 0
    polybench_start_instruments;
@@ -265,7 +265,7 @@ int main(int argc, char** argv)
 
    //ONLY FOR RANK 0 PRINT 
    if (rank == 0) {
-      printf("Time for Gather: ");
+      printf("Gather Time: ");
       polybench_print_instruments;
    }
 
