@@ -43,7 +43,7 @@ else:
 print(f"Processing directory: {output_dir}")
 
 rows = []
-time_pattern = re.compile(r"Time for Kernel calculation:\s*([\d.]+)")
+time_pattern = re.compile(r"Time:\s*([\d.]+)")
 
 # Process the provided or determined benchmark folder
 dirs = [
@@ -62,7 +62,7 @@ for dir in dirs:
     num_processes = int(match.group("processes"))
     run_type = match.group("type")
 
-    out_dir = os.path.join(output_dir, dir, "out")
+    out_dir = os.path.join(output_dir, dir)
     out_files = [f for f in os.listdir(out_dir) if f.endswith(".out")]
 
     for file in out_files:
@@ -72,7 +72,7 @@ for dir in dirs:
         valid_lines = []
         for line in lines:
             match = time_pattern.search(line)
-            if run_type == "mpi" and match:
+            if match:
                 try:
                     runtime = float(match.group(1))
                     valid_lines.append(runtime)
@@ -84,7 +84,6 @@ for dir in dirs:
                     valid_lines.append(runtime)
                 except ValueError:
                     continue
-                
 
         if run_type == "mpi":
             runs = [
