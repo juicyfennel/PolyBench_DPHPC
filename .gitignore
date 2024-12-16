@@ -18,7 +18,6 @@ config.mk
 measurements/*
 .vscode
 
-
 # plots
 plots/*
 
@@ -38,8 +37,8 @@ outputs/*
 # For Euler enjoyers
 *.sbatch
 
-# Runs both local and Euler
-myRuns
+# For runtime_analysis
+runtime_analysis/*
 
-# csv files
-runtime_analysis
+# Runs both local and Euler
+myRuns/*

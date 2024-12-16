@@ -6,42 +6,14 @@ import sys
 from datetime import datetime
 
 kernels = {
-    "2mm": "./linear-algebra/kernels/2mm",
-    "3mm": "./linear-algebra/kernels/3mm",
-    "atax": "./linear-algebra/kernels/atax",
-    "bicg": "./linear-algebra/kernels/bicg",
-    "doitgen": "./linear-algebra/kernels/doitgen",
-    "mvt": "./linear-algebra/kernels/mvt",
-    "gemm": "./linear-algebra/blas/gemm",
-    "gemver": "./linear-algebra/blas/gemver",
-    "gesummv": "./linear-algebra/blas/gesummv",
-    "symm": "./linear-algebra/blas/symm",
-    "syr2k": "./linear-algebra/blas/syr2k",
-    "syrk": "./linear-algebra/blas/syrk",
-    "trmm": "./linear-algebra/blas/trmm",
-    "cholesky": "./linear-algebra/solvers/cholesky",
-    "durbin": "./linear-algebra/solvers/durbin",
-    "gramschmidt": "./linear-algebra/solvers/gramschmidt",
-    "lu": "./linear-algebra/solvers/lu",
-    "ludcmp": "./linear-algebra/solvers/ludcmp",
-    "trisolv": "./linear-algebra/solvers/trisolv",
-    "correlation": "./datamining/correlation",
-    "covariance": "./datamining/covariance",
-    "deriche": "./medley/deriche",
-    "floyd-warshall": "./medley/floyd-warshall",
-    "nussinov": "./medley/nussinov",
-    "adi": "./stencils/adi",
-    "fdtd-2d": "./stencils/fdtd-2d",
-    "heat-3d": "./stencils/heat-3d",
-    "jacobi-1d": "./stencils/jacobi-1d",
-    "jacobi-2d": "./stencils/jacobi-2d",
-    "seidel-2d": "./stencils/seidel-2d",
+    "gemver": "./kernels/gemver",
+    "jacobi-2d": "./kernels/jacobi-2d",
 }
 
 
 inputsizes = {
     "jacobi-2d": [{"TSTEPS": 500, "N": 3362}],
-    "gemver": [{"N": 40000}],
+    "gemver": [{"N": 10000}],
 }
 
 
@@ -112,6 +84,7 @@ args = parser.parse_args()
 if args.size:
     inputsizes["gemver"] = [{"N": args.size}]
 
+
 # # compile
 def compile(datasets):
     print(
@@ -127,10 +100,6 @@ def compile(datasets):
     for kernel in args.kernels:
         if args.verbose:
             print(kernel)
-        make_cmd = ["make", "clean"]
-        make_process = subprocess.run(
-            make_cmd, cwd=kernels[kernel], capture_output=True, text=True
-        )
 
         rel_root = os.path.relpath(".", kernels[kernel])
         utilities_path = os.path.join(rel_root, "utilities")
@@ -156,10 +125,18 @@ def compile(datasets):
                 content += " -fopenmp" if interface == "omp" else ""
                 content += "\n\n"
 
-        content += "clean:\n\t@ rm -f bin/*\n\n"
+        content += "clean:\n"
+        for filename, inputsize_flags in datasets[kernel].items():
+            for interface in args.interfaces:
+                content += f"\t@rm -f bin/{filename}{interfaces[interface]}\n"
 
         with open(os.path.join(kernels[kernel], "Makefile"), "w") as makefile:
             makefile.write(content)
+
+        make_cmd = ["make", "clean"]
+        make_process = subprocess.run(
+            make_cmd, cwd=kernels[kernel], capture_output=True, text=True
+        )
 
     print(
         "**************************************************\n"
@@ -187,7 +164,7 @@ def compile(datasets):
             sys.stdout.write(make_process.stdout)
 
 
-def run_local(kernel, interface, p, filename, out_dir, err_dir, hostname_dir):
+def run_local(kernel, interface, p, filename, out_dir_run):
     for i in range(args.num_runs):
         cmd = [os.path.join(".", "bin", f"{filename}{interfaces[interface]}")]
         if interface == "mpi":
@@ -196,8 +173,8 @@ def run_local(kernel, interface, p, filename, out_dir, err_dir, hostname_dir):
             os.environ["OMP_NUM_THREADS"] = str(p)
 
         with (
-            open(os.path.join(out_dir, f"{i}.out"), "w") as out,
-            open(os.path.join(err_dir, f"{i}.err"), "w") as err,
+            open(os.path.join(out_dir_run, f"{i}.out"), "w") as out,
+            open(os.path.join(out_dir_run, f"{i}.err"), "w") as err,
         ):
             driver_process = subprocess.run(
                 cmd,
@@ -224,7 +201,7 @@ def run_local(kernel, interface, p, filename, out_dir, err_dir, hostname_dir):
             sys.exit(1)
 
 
-def run_euler(kernel, interface, p, filename, out_dir, err_dir, hostname_dir):
+def run_euler(kernel, interface, p, filename, out_dir_run):
     # date = datetime.now().strftime("%Y_%m_%d__%H:%M:%S")
 
     sbatch_dir = os.path.join(kernels[kernel], "sbatch")
@@ -238,8 +215,8 @@ def run_euler(kernel, interface, p, filename, out_dir, err_dir, hostname_dir):
 
     content = "#!/bin/bash\n"
     content += "#SBATCH --time=00:04:00\n"
-    content += f"#SBATCH -o ./{out_dir}/%j.out\n"
-    content += f"#SBATCH -e ./{err_dir}/%j.err\n"
+    content += f"#SBATCH -o ./{out_dir_run}/%j.out\n"
+    content += f"#SBATCH -e ./{out_dir_run}/%j.err\n"
     # content += "#SBATCH --mem-bind=local\n"
 
     nodelist = [f"eu-g9-0{i+1:02}-{j+1}" for i in range(48) for j in range(4)]
@@ -275,20 +252,14 @@ def run_euler(kernel, interface, p, filename, out_dir, err_dir, hostname_dir):
 
     content += f"for i in {{1..{args.num_runs}}}; do\n"
     if interface == "mpi":
-        content += (
-            "srun perf stat -e cycles,instructions,cache-misses,context-switches,cpu-migrations,dTLB-load-misses,iTLB-load-misses "
-            + binary_path
-            + "\n"
-        )
-    else:
-        content += (
-            "perf stat -e cycles,instructions,cache-misses,context-switches,cpu-migrations,dTLB-load-misses,iTLB-load-misses "
-            + binary_path
-            + "\n"
-        )
-    content += "done\n"
+        content += "srun "
 
-    content += f"srun hostname > ./{hostname_dir}/${{SLURM_JOB_ID}}.txt\n"
+    content += "perf stat " + binary_path + "\n"
+    content += 'echo "==============="\n'  # stdout
+    content += 'echo "===============" >&2\n'  # stderr
+    content += "done\n\n"
+
+    content += f"srun hostname > ./{out_dir_run}/hostname.txt\n"
 
     # content += (
     #     f"for i in {{1..{args.num_runs}}}; do\n"
@@ -330,8 +301,11 @@ def run(datasets, on_euler):
     )
 
     date = datetime.now().strftime("%Y_%m_%d__%H-%M-%S")
+    if on_euler:
+        output_dir = os.path.join("outputs/euler", date)
+    else:
+        output_dir = os.path.join("outputs/local", date)
 
-    output_dir = os.path.join("outputs", date)
     os.makedirs(output_dir, exist_ok=True)
 
     with open(os.path.join(output_dir, "inputsizes.json"), "w") as f:
@@ -348,20 +322,11 @@ def run(datasets, on_euler):
                     if interface == "std" and p != 1 or interface != "std" and p == 1:
                         continue
 
-                    out_dir = os.path.join(
-                        output_dir, f"{filename}_np_{p}_{interface}", "out"
-                    )
-                    err_dir = os.path.join(
-                        output_dir, f"{filename}_np_{p}_{interface}", "err"
+                    out_dir_run = os.path.join(
+                        output_dir, f"{filename}_np_{p}_{interface}"
                     )
 
-                    hostname_dir = os.path.join(
-                        output_dir, f"{filename}_np_{p}_{interface}", "hostname"
-                    )
-
-                    os.makedirs(out_dir, exist_ok=True)
-                    os.makedirs(err_dir, exist_ok=True)
-                    os.makedirs(hostname_dir, exist_ok=True)
+                    os.makedirs(out_dir_run, exist_ok=True)
 
                     if interface == "omp":
                         with open(
@@ -384,9 +349,7 @@ def run(datasets, on_euler):
                             interface,
                             p,
                             filename,
-                            out_dir,
-                            err_dir,
-                            hostname_dir,
+                            out_dir_run,
                         )
                     # Euler
                     else:
@@ -395,9 +358,7 @@ def run(datasets, on_euler):
                             interface,
                             p,
                             filename,
-                            out_dir,
-                            err_dir,
-                            hostname_dir,
+                            out_dir_run,
                         )
                         # run_local()
 
@@ -423,6 +384,7 @@ def main():
 
     if not args.no_compile:
         compile(datasets)
+    # return
 
     if args.kernels:
         run(datasets, on_euler)
