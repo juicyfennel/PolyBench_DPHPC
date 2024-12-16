@@ -102,7 +102,7 @@ for dir in dirs:
                 "Size": size,
                 "Processes": num_processes,
                 "Type": run_type,
-                "Max Runtime": mean_runtime,
+                "Mean Runtime": mean_runtime,
                 "STD": variability
             })
         elif run_type == "omp":
