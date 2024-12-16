@@ -90,39 +90,44 @@ for dir in dirs:
                 valid_lines[i:i + num_processes]
                 for i in range(0, len(valid_lines), num_processes)
             ]
+            max_runtimes = []
             for run in runs:
                 if len(run) == num_processes:
                     max_runtime = max(run)
-                    variability = np.std(run)
-                    rows.append({
-                        "Kernel": kernel,
-                        "Size": size,
-                        "Processes": num_processes,
-                        "Type": run_type,
-                        "Max Runtime": max_runtime,
-                        "STD": variability
-                    })
+                    max_runtimes.append(max_runtime)
+            mean_runtime = np.mean(max_runtimes)
+            variability = np.std(max_runtimes)
+            rows.append({
+                "Kernel": kernel,
+                "Size": size,
+                "Processes": num_processes,
+                "Type": run_type,
+                "Max Runtime": mean_runtime,
+                "STD": variability
+            })
         elif run_type == "omp":
             if valid_lines:
-                max_runtime = max(valid_lines)
+                mean_runtime = np.mean(valid_lines)
                 variability = np.std(valid_lines)
                 rows.append({
                     "Kernel": kernel,
                     "Size": size,
                     "Processes": num_processes,
                     "Type": run_type,
-                    "Max Runtime": max_runtime,
+                    "Mean Runtime": mean_runtime,
                     "STD": variability
                 })
         elif run_type == "std":
-            for runtime in valid_lines:
+            if valid_lines:
+                mean_runtime = np.mean(valid_lines)
+                variability = np.std(valid_lines)
                 rows.append({
                     "Kernel": kernel,
                     "Size": size,
                     "Processes": 1,
                     "Type": run_type,
-                    "Max Runtime": runtime,
-                    "STD": 0  # No variability for single runtime
+                    "Mean Runtime": mean_runtime,
+                    "STD": variability  
                 })
 
 # Create a DataFrame
