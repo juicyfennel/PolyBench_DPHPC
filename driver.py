@@ -38,13 +38,15 @@ kernels = {
     "seidel-2d": "./stencils/seidel-2d",
 }
 
+
 inputsizes = {
     "jacobi-2d": [{"TSTEPS": 500, "N": 3362}],
     "gemver": [{"N": 40000}],
 }
 
+
 # Number of processes to test, always include 1 if you want to test the serial version
-num_processes = [1, 2, 4, 8, 16]  # MAX 48
+num_processes = [1, 2, 4]  # MAX 48
 
 
 interfaces = {"std": "", "omp": "_omp", "mpi": "_mpi"}
@@ -62,8 +64,8 @@ omp_config = {
 
 mpi_config = {
     "num_processes": num_processes,  # Guest users can only use up to 48 processors
-    "nodes": 1,
-    "mem_per_process": 500,
+    "nodes": 2,
+    "total_memory": 60000,
 }
 
 
@@ -98,8 +100,17 @@ parser.add_argument(
 
 parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output")
 
+parser.add_argument(
+    "--size",
+    type=int,
+    help="Input size for the kernel (e.g., 10000, 25000, 40000)",
+    default=None,
+)
+
 args = parser.parse_args()
 
+if args.size:
+    inputsizes["gemver"] = [{"N": args.size}]
 
 # # compile
 def compile(datasets):
@@ -226,7 +237,7 @@ def run_euler(kernel, interface, p, filename, out_dir, err_dir, hostname_dir):
     sbatch_file = os.path.join(sbatch_dir, f"{filename}{interfaces[interface]}.sbatch")
 
     content = "#!/bin/bash\n"
-    content += "#SBATCH --time=00:02:00\n"
+    content += "#SBATCH --time=00:04:00\n"
     content += f"#SBATCH -o ./{out_dir}/%j.out\n"
     content += f"#SBATCH -e ./{err_dir}/%j.err\n"
     # content += "#SBATCH --mem-bind=local\n"
@@ -240,7 +251,7 @@ def run_euler(kernel, interface, p, filename, out_dir, err_dir, hostname_dir):
     if interface == "mpi":
         content += f"#SBATCH --nodes={mpi_config['nodes']}\n"
         content += f"#SBATCH --ntasks={p}\n"
-        content += f"#SBATCH --mem-per-cpu={mpi_config['mem_per_process']}\n"
+        content += f"#SBATCH --mem-per-cpu={int(mpi_config['total_memory']/p)}\n\n"
         content += "#SBATCH -C ib\n\n"
 
     elif interface == "omp":
@@ -262,15 +273,31 @@ def run_euler(kernel, interface, p, filename, out_dir, err_dir, hostname_dir):
         "module load stack/2024-06 openmpi/4.1.6 openblas/0.3.24 2> /dev/null\n\n"
     )
 
+    content += f"for i in {{1..{args.num_runs}}}; do\n"
     if interface == "mpi":
-        content += "srun "
+        content += (
+            "srun perf stat -e cycles,instructions,cache-misses,context-switches,cpu-migrations,dTLB-load-misses,iTLB-load-misses "
+            + binary_path
+            + "\n"
+        )
+    else:
+        content += (
+            "perf stat -e cycles,instructions,cache-misses,context-switches,cpu-migrations,dTLB-load-misses,iTLB-load-misses "
+            + binary_path
+            + "\n"
+        )
+    content += "done\n"
 
-    content += (
-        "perf stat -e cycles,instructions,cache-misses,context-switches,cpu-migrations,dTLB-load-misses,iTLB-load-misses "
-        + binary_path
-    )
+    content += f"srun hostname > ./{hostname_dir}/${{SLURM_JOB_ID}}.txt\n"
 
-    content += f"\nsrun hostname > ./{hostname_dir}/${{SLURM_JOB_ID}}.txt\n"
+    # content += (
+    #     f"for i in {{1..{args.num_runs}}}; do\n"
+    #     "    perf stat -e cycles,instructions,cache-misses,context-switches,cpu-migrations,dTLB-load-misses,iTLB-load-misses "
+    #     + binary_path
+    #     + "\n"
+    #     "done\n"
+    # )
+    # content += f"\nsrun hostname > ./{hostname_dir}/${{SLURM_JOB_ID}}.txt\n"
 
     with open(sbatch_file, "w") as file:
         file.write(content)
@@ -279,20 +306,20 @@ def run_euler(kernel, interface, p, filename, out_dir, err_dir, hostname_dir):
             print(f"Sbatch file generated: {sbatch_file}")
 
     # Submit sbatch files
-    for i in range(args.num_runs):
-        submission = subprocess.run(
-            [
-                "sbatch",
-                f"--job-name={filename}{interfaces[interface]}_run{i}_np{p}",
-                sbatch_file,
-            ],
-            capture_output=True,
-            text=True,
-        )
-        print(submission.stdout)
-        if submission.returncode != 0:
-            print(f"Error submitting job: {submission.stderr}")
-            sys.exit(1)
+    # for i in range(args.num_runs):
+    submission = subprocess.run(
+        [
+            "sbatch",
+            f"--job-name={filename}{interfaces[interface]}_np{p}",
+            sbatch_file,
+        ],
+        capture_output=True,
+        text=True,
+    )
+    print(submission.stdout)
+    if submission.returncode != 0:
+        print(f"Error submitting job: {submission.stderr}")
+        sys.exit(1)
 
 
 def run(datasets, on_euler):

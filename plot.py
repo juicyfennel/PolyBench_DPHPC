@@ -1,129 +1,98 @@
-import argparse
-import os
-from datetime import datetime
-
+import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
-import seaborn as sns
+import argparse
+import os
 
-# Argument parser to take the kernel as input
-parser = argparse.ArgumentParser(description="Plot execution times for a given kernel")
+# Argument parser
+parser = argparse.ArgumentParser(description="Plot runtime analysis from a CSV file")
 parser.add_argument(
-    "--all",
-    action="store_true",
-    help="Plot all measurements from ./outputs (default: latest only)",
-)
-parser.add_argument(
-    "--type", type=str, default="all", help="Type of plot to generate (default: np)"
+    "--file", required=True, help="Path to the runtime_analysis.csv file"
 )
 args = parser.parse_args()
 
-# Construct the directory path for the given kernel
-output_dir = "./outputs"
-
-# Check if the directory exists
-if not os.path.exists(output_dir):
-    print("Error: The directory ./outputs does not exist.")
+# Validate the input file
+if not os.path.exists(args.file):
+    print(f"Error: File {args.file} does not exist.")
     exit(1)
 
-# List containing all folders in ./outputs
-benchmark_outputs = [
-    f for f in os.listdir(output_dir) if os.path.isdir(os.path.join(output_dir, f))
-]
+# Load the CSV data
+df = pd.read_csv(args.file)
 
-# If --all flag is not provided, plot only latest measurements
-if not args.all:
-    # Get the latest folder based on the timestamp in the folder name
-    latest_folder = max(
-        benchmark_outputs, key=lambda f: datetime.strptime(f, "%Y_%m_%d__%H-%M-%S")
+# Extract the problem size
+if "Size" not in df.columns:
+    print("Error: 'Size' column not found in the CSV.")
+    exit(1)
+problem_size = df["Size"].iloc[0]  # Assumes all rows have the same size
+print(f"Problem Size: {problem_size}")
+
+# Group by Kernel, Size, Processes, and Type to compute averages
+df_grouped = (
+    df.groupby(["Kernel", "Size", "Processes", "Type"])
+    .agg(
+        {
+            "Max Runtime": "mean",  # Average runtime
+            "STD": "mean",  # Average standard deviation
+        }
     )
-    benchmark_outputs = [latest_folder]
+    .reset_index()
+)
 
+# Calculate Speedup and Efficiency
+baseline_runtime = df_grouped[
+    (df_grouped["Processes"] == 1) & (df_grouped["Type"] == "std")
+]["Max Runtime"].mean()
+if pd.isna(baseline_runtime):
+    print("Error: Could not find baseline runtime for standard (std) runs.")
+    exit(1)
 
-def np_plot(bm, kernel, df):
-    plt.figure(figsize=(12, 8))
-    sns.set_theme(style="whitegrid")
-    # Line plot with confidence interval for the median
-    sns.lineplot(
-        x="np",
-        y="Max Execution Time",
-        hue="Interface",
-        data=df,
-        estimator=np.median,  # dk if median or mean is better
-        errorbar=("ci", 95),  # 95% confidence interval
-        n_boot=1000,  # Number of bootstrap samples
+df_grouped["Speedup"] = baseline_runtime / df_grouped["Max Runtime"]
+df_grouped["Efficiency"] = df_grouped["Speedup"] / df_grouped["Processes"]
+
+# Plot Runtime vs Number of Processes
+plt.figure(figsize=(10, 6))
+for t in df_grouped["Type"].unique():
+    subset = df_grouped[df_grouped["Type"] == t].sort_values(by="Processes")
+    plt.errorbar(
+        subset["Processes"],
+        subset["Max Runtime"],
+        yerr=subset["STD"],
+        label=t,
+        marker="o",
     )
-    # Set the axis labels and title
-    plt.xlabel("Input Size", fontsize=12)
-    plt.ylabel("Execution Time [s]", fontsize=12)
-    plt.title(
-        f"Execution Times for {kernel} Across Different Parallelization Paradigms and Input Sizes",
-        fontsize=14,
-    )
-    plt.xticks(rotation=45)  # Rotate x-axis labels for better readability
-    plt.legend(title="Paradigm", fontsize=10)
+plt.xlabel("Number of Processes")
+plt.ylabel("Runtime (s)")
+plt.title(f"Runtime vs Number of Processes (Size={problem_size})")
+plt.legend(title="Type")
+plt.grid()
+plt.show()
 
-    plt.tight_layout()
+# Plot Speedup vs Number of Processes
+plt.figure(figsize=(10, 6))
+for t in df_grouped["Type"].unique():
+    subset = df_grouped[df_grouped["Type"] == t].sort_values(by="Processes")
+    plt.plot(subset["Processes"], subset["Speedup"], label=t, marker="o")
+plt.plot(
+    df_grouped["Processes"].unique(),
+    df_grouped["Processes"].unique(),
+    "k--",
+    label="Ideal Speedup",
+)
+plt.xlabel("Number of Processes")
+plt.ylabel("Speedup")
+plt.title(f"Speedup vs Number of Processes (Size={problem_size})")
+plt.legend(title="Type")
+plt.grid()
+plt.show()
 
-    # Save the plot to a file
-    if not os.path.exists(f"./outputs/{bm}/plots"):
-        os.makedirs(f"./outputs/{bm}/plots")
-
-    plt.savefig(f"./outputs/{bm}/plots/{kernel}_np.png")
-    plt.savefig(f"./outputs/{bm}/plots/{kernel}_np.svg")
-
-
-def dataset_plot(bm, kernel, df):
-    plt.figure(figsize=(12, 8))
-    sns.set_theme(style="whitegrid")
-    # Line plot with confidence interval for the median
-    sns.lineplot(
-        x="Dataset",
-        y="Max Execution Time",
-        hue="Interface",
-        data=df,
-        estimator=np.median,  # dk if median or mean is better
-        errorbar=("ci", 95),  # 95% confidence interval
-        n_boot=1000,  # Number of bootstrap samples
-    )
-    # Set the axis labels and title
-    plt.xlabel("Input Size", fontsize=12)
-    plt.ylabel("Execution Time [s]", fontsize=12)
-    plt.title(
-        f"Execution Times for {kernel} Across Different Parallelization Paradigms and Input Sizes",
-        fontsize=14,
-    )
-    plt.xticks(rotation=45)  # Rotate x-axis labels for better readability
-    plt.legend(title="Paradigm", fontsize=10)
-
-    plt.tight_layout()
-
-    # Save the plot to a file
-    if not os.path.exists(f"./outputs/{bm}/plots"):
-        os.makedirs(f"./outputs/{bm}/plots")
-
-    plt.savefig(f"./outputs/{bm}/plots/{kernel}_datasets.png")
-    plt.savefig(f"./outputs/{bm}/plots/{kernel}_datasets.svg")
-
-
-for bm in benchmark_outputs:
-    dfs = {}
-    csv_files = [f for f in os.listdir(f"./outputs/{bm}/data") if f.endswith(".csv")]
-
-    for csv_file in csv_files:
-        # Read the CSV file into a DataFrame
-        df = pd.read_csv(f"./outputs/{bm}/data/{csv_file}")
-        # Extract the kernel name from the CSV file name
-        kernel = csv_file.split(".")[0]
-        # Add the DataFrame to the dictionary
-        dfs[kernel] = df
-
-    for kernel, df in dfs.items():
-        if args.type == "np" or args.type == "all":
-            np_plot(bm, kernel, df)
-
-        if args.type == "dataset" or args.type == "all":
-            dataset_plot(bm, kernel, df)
-
-    exit(0)
+# Plot Efficiency vs Number of Processes
+plt.figure(figsize=(10, 6))
+for t in df_grouped["Type"].unique():
+    subset = df_grouped[df_grouped["Type"] == t].sort_values(by="Processes")
+    plt.plot(subset["Processes"], subset["Efficiency"], label=t, marker="o")
+plt.xlabel("Number of Processes")
+plt.ylabel("Efficiency")
+plt.title(f"Efficiency vs Number of Processes (Size={problem_size})")
+plt.legend(title="Type")
+plt.grid()
+plt.show()
