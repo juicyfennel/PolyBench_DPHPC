@@ -142,6 +142,15 @@ void kernel_gemver(DATA_TYPE alpha,
             w[i - start_row] += alpha * IDX_2D(A, i-start_row, j, N) * x[j];
         }
     }
+    // for (i = 0; i < N; i++)
+    //     for (j = 0; j < N; j++)
+    //     w[i] = w[i] +  alpha * IDX_2D(A, i, j, N) * x[j];
+
+    // printf("Gathered w:\n");
+    // for (int i = 0; i < N; i++) {
+    //     printf("%f ", w[i]);
+    // }
+    // printf("\n");
 }
 
 
@@ -192,9 +201,9 @@ int main(int argc, char** argv) {
 
     clock_gettime(CLOCK_MONOTONIC_RAW, &end);
 
-    printf("Rank %d, Time: %f\n", rank,(end.tv_sec - start.tv_sec) + 1e-9 * (end.tv_nsec - start.tv_nsec));
+    printf("Rank %d, Time for Kernel calculation: %f\n", rank,(end.tv_sec - start.tv_sec) + 1e-9 * (end.tv_nsec - start.tv_nsec));
 
-    // check that A is computed correctly
+//     // check that A is computed correctly
 //    printf("Rows %d - %d, Gathered A:\n", start_row, start_row + num_rows-1);
 //    for (int i = 0; i < num_rows; i++) {
 //       for (int j = 0; j < n; j++) {
@@ -229,8 +238,6 @@ int main(int argc, char** argv) {
     free(x);
     free(w);
     free(A);
-
-    MPI_Finalize(); 
-
+    
     return 0;
 }
