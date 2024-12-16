@@ -18,7 +18,7 @@ inputsizes = {
 
 
 # Number of processes to test, always include 1 if you want to test the serial version
-num_processes = [1, 2, 4]  # MAX 48
+num_processes = [1, 2, 4, 8, 12, 16, 20, 24, 28, 32]  # MAX 48
 
 
 interfaces = {"std": "", "omp": "_omp", "mpi": "_mpi"}

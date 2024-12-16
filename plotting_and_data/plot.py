@@ -1,105 +1,86 @@
 import pandas as pd
 import matplotlib.pyplot as plt
-import numpy as np
-import argparse
 import os
+import argparse
 
-# Argument parser
-parser = argparse.ArgumentParser(description="Plot runtime analysis from a CSV file")
-parser.add_argument(
-    "--file", required=True, help="Path to the runtime_analysis.csv file"
-)
-args = parser.parse_args()
+# Plot runtime, speedup, and efficiency
+def plot_metrics(df, size, output_dir):
+    interfaces = df['Type'].unique()
+    x_label = 'Number of Processes'
 
-# Validate the input file
-if not os.path.exists(args.file):
-    print(f"Error: File {args.file} does not exist.")
-    exit(1)
+    # Runtime plot
+    plt.figure()
+    for iface in interfaces:
+        iface_data = df[df['Type'] == iface].sort_values(by='Processes')
+        plt.plot(iface_data['Processes'], iface_data['Mean Runtime'], label=iface, marker="o")
+        plt.fill_between(iface_data['Processes'],
+                         iface_data['Mean Runtime'] - iface_data['STD'],
+                         iface_data['Mean Runtime'] + iface_data['STD'], alpha=0.2)
+    plt.xlabel(x_label)
+    plt.ylabel('Runtime (s)')
+    plt.title(f'Runtime vs {x_label} (Size {size})')
+    plt.legend()
+    plt.grid()
+    plt.savefig(f"{output_dir}/runtime_vs_processes.png")
+    plt.close()
 
-# Load the CSV data
-df = pd.read_csv(args.file)
+    # Speedup plot
+    plt.figure()
+    for iface in interfaces:
+        iface_data = df[df['Type'] == iface].sort_values(by='Processes')
+        plt.plot(iface_data['Processes'], iface_data['Speedup'], label=iface, marker="o")
+    plt.xlabel(x_label)
+    plt.ylabel('Speedup')
+    plt.title(f'Speedup vs {x_label} (Size {size})')
+    plt.legend()
+    plt.grid()
+    plt.savefig(f"{output_dir}/speedup_vs_processes.png")
+    plt.close()
 
-# Extract the problem size
-if "Size" not in df.columns:
-    print("Error: 'Size' column not found in the CSV.")
-    exit(1)
-problem_size = df["Size"].iloc[0]  # Assumes all rows have the same size
-print(f"Problem Size: {problem_size}")
+    # Efficiency plot
+    plt.figure()
+    for iface in interfaces:
+        iface_data = df[df['Type'] == iface].sort_values(by='Processes')
+        plt.plot(iface_data['Processes'], iface_data['Efficiency'], label=iface, marker="o")
+    plt.xlabel(x_label)
+    plt.ylabel('Efficiency')
+    plt.title(f'Efficiency vs {x_label} (Size {size})')
+    plt.legend()
+    plt.grid()
+    plt.savefig(f"{output_dir}/efficiency_vs_processes.png")
+    plt.close()
 
-# Group by Kernel, Size, Processes, and Type to compute averages
-df_grouped = (
-    df.groupby(["Kernel", "Size", "Processes", "Type"])
-    .agg(
-        {
-            "Max Runtime": "mean",  # Average runtime
-            "STD": "mean",  # Average standard deviation
-        }
-    )
-    .reset_index()
-)
+# Main function
+def main():
+    parser = argparse.ArgumentParser(description="Plot runtime, speedup, and efficiency from a CSV file.")
+    parser.add_argument('--file', type=str, required=True, help="Path to the input CSV file.")
+    args = parser.parse_args()
 
-# Calculate Speedup and Efficiency
-baseline_runtime = df_grouped[
-    (df_grouped["Processes"] == 1) & (df_grouped["Type"] == "std")
-]["Max Runtime"].mean()
-if pd.isna(baseline_runtime):
-    print("Error: Could not find baseline runtime for standard (std) runs.")
-    exit(1)
+    input_file = args.file
+    output_dir_base = "runtime_speedup_efficiency"
 
-df_grouped["Speedup"] = baseline_runtime / df_grouped["Max Runtime"]
-df_grouped["Efficiency"] = df_grouped["Speedup"] / df_grouped["Processes"]
+    # Read the data
+    df = pd.read_csv(input_file)
 
-# Plot Runtime vs Number of Processes with shaded area
-plt.figure(figsize=(10, 6))
-for t in df_grouped["Type"].unique():
-    subset = df_grouped[df_grouped["Type"] == t].sort_values(by="Processes")
-    plt.plot(
-        subset["Processes"], 
-        subset["Max Runtime"], 
-        label=t, 
-        marker="o", 
-        linestyle="-"
-    )
-    plt.fill_between(
-        subset["Processes"],
-        subset["Max Runtime"] - subset["STD"],
-        subset["Max Runtime"] + subset["STD"],
-        alpha=0.2,
-        label=f"{t} (±STD)",
-    )
-plt.xlabel("Number of Processes")
-plt.ylabel("Runtime (s)")
-plt.title(f"Runtime vs Number of Processes (Size={problem_size})")
-plt.legend(title="Type")
-plt.grid()
-plt.show()
+    # Ensure required columns exist
+    required_columns = ['Size', 'Processes', 'Type', 'Mean Runtime', 'STD']
+    for col in required_columns:
+        if col not in df.columns:
+            print(f"Error: Required column '{col}' is missing from the CSV.")
+            exit(1)
 
-# Plot Speedup vs Number of Processes
-plt.figure(figsize=(10, 6))
-for t in df_grouped["Type"].unique():
-    subset = df_grouped[df_grouped["Type"] == t].sort_values(by="Processes")
-    plt.plot(subset["Processes"], subset["Speedup"], label=t, marker="o")
-plt.plot(
-    df_grouped["Processes"].unique(),
-    df_grouped["Processes"].unique(),
-    "k--",
-    label="Ideal Speedup",
-)
-plt.xlabel("Number of Processes")
-plt.ylabel("Speedup")
-plt.title(f"Speedup vs Number of Processes (Size={problem_size})")
-plt.legend(title="Type")
-plt.grid()
-plt.show()
+    # Calculate speedup and efficiency
+    reference_runtime = df[(df['Processes'] == 1) & (df['Type'] == 'std')]['Mean Runtime'].iloc[0]
+    df['Speedup'] = reference_runtime / df['Mean Runtime']
+    df['Efficiency'] = df['Speedup'] / df['Processes']
 
-# Plot Efficiency vs Number of Processes
-plt.figure(figsize=(10, 6))
-for t in df_grouped["Type"].unique():
-    subset = df_grouped[df_grouped["Type"] == t].sort_values(by="Processes")
-    plt.plot(subset["Processes"], subset["Efficiency"], label=t, marker="o")
-plt.xlabel("Number of Processes")
-plt.ylabel("Efficiency")
-plt.title(f"Efficiency vs Number of Processes (Size={problem_size})")
-plt.legend(title="Type")
-plt.grid()
-plt.show()
+    # Extract size and create output directory
+    size = df['Size'].iloc[0]
+    output_dir = os.path.join(output_dir_base, "size_"+str(size))
+    os.makedirs(output_dir, exist_ok=True)
+
+    # Plot metrics
+    plot_metrics(df, size, output_dir)
+
+if __name__ == "__main__":
+    main()
