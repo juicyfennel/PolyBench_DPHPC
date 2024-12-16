@@ -49,16 +49,23 @@ if pd.isna(baseline_runtime):
 df_grouped["Speedup"] = baseline_runtime / df_grouped["Max Runtime"]
 df_grouped["Efficiency"] = df_grouped["Speedup"] / df_grouped["Processes"]
 
-# Plot Runtime vs Number of Processes
+# Plot Runtime vs Number of Processes with shaded area
 plt.figure(figsize=(10, 6))
 for t in df_grouped["Type"].unique():
     subset = df_grouped[df_grouped["Type"] == t].sort_values(by="Processes")
-    plt.errorbar(
+    plt.plot(
+        subset["Processes"], 
+        subset["Max Runtime"], 
+        label=t, 
+        marker="o", 
+        linestyle="-"
+    )
+    plt.fill_between(
         subset["Processes"],
-        subset["Max Runtime"],
-        yerr=subset["STD"],
-        label=t,
-        marker="o",
+        subset["Max Runtime"] - subset["STD"],
+        subset["Max Runtime"] + subset["STD"],
+        alpha=0.2,
+        label=f"{t} (±STD)",
     )
 plt.xlabel("Number of Processes")
 plt.ylabel("Runtime (s)")
