@@ -100,10 +100,6 @@ def compile(datasets):
     for kernel in args.kernels:
         if args.verbose:
             print(kernel)
-        make_cmd = ["make", "clean"]
-        make_process = subprocess.run(
-            make_cmd, cwd=kernels[kernel], capture_output=True, text=True
-        )
 
         rel_root = os.path.relpath(".", kernels[kernel])
         utilities_path = os.path.join(rel_root, "utilities")
@@ -136,6 +132,11 @@ def compile(datasets):
 
         with open(os.path.join(kernels[kernel], "Makefile"), "w") as makefile:
             makefile.write(content)
+
+        make_cmd = ["make", "clean"]
+        make_process = subprocess.run(
+            make_cmd, cwd=kernels[kernel], capture_output=True, text=True
+        )
 
     print(
         "**************************************************\n"
