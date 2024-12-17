@@ -3,6 +3,7 @@
 #include <string.h>
 #include <math.h>
 #include <mpi.h>
+#include <time.h> 
 
 /* Include polybench common header. */
 #include <polybench.h>
@@ -282,8 +283,10 @@ int main(int argc, char **argv)
              POLYBENCH_ARRAY(A),
              POLYBENCH_ARRAY(B));
 
-  /* Start timer. */
-  polybench_start_instruments;
+  flush_cache();
+
+  struct timespec start, end; 
+  clock_gettime(CLOCK_MONOTONIC_RAW, &start);
 
   /* Run kernel. */
   kernel_jacobi_2d(tsteps,
@@ -297,12 +300,11 @@ int main(int argc, char **argv)
                    size,
                    cart_comm);
 
-  /* Stop and print timer. */
-  polybench_stop_instruments;
-  polybench_print_instruments;
+  clock_gettime(CLOCK_MONOTONIC_RAW, &end);
 
-  // // Gather all data in rank 0
+  printf("Rank %d, Time: %f\n", rank,(end.tv_sec - start.tv_sec) + 1e-9 * (end.tv_nsec - start.tv_nsec));
 
+  // Gather all data in rank 0
   double (*A_res)[N][N] = NULL;
   if(rank == 0) {
     A_res = (double(*)[N][N])malloc((N) * (N) * sizeof(double));
