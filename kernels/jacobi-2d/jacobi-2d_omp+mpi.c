@@ -4,6 +4,7 @@
 #include <time.h>
 #include <math.h>
 #include <mpi.h>
+#include <assert.h>
 
 #include <polybench.h>
 #include "jacobi-2d.h"
