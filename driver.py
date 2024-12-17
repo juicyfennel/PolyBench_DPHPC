@@ -7,23 +7,28 @@ from datetime import datetime
 
 kernels = {
     "gemver": "./kernels/gemver",
-    "jacobi-2d": "./kernels/jacobi-2d",
+    "jacobi-2d": "./kernels/jacobi-2d"
 }
-
 
 inputsizes = {
-    "jacobi-2d": [{"TSTEPS": 500, "N": 3362}],
-    "gemver": [{"N": 10000}],
+    "jacobi-2d": {
+        "TSTEPS": 500,
+        "N": 3362
+    },
+    "gemver": {
+        "N": 10000
+    }
 }
 
-# Number of processes to test, always include 1 if you want to test the serial version 
-num_processes = [1, 4, 9, 16, 25, 36, 48] # MAX 48
-
 # Number of processes to test, always include 1 if you want to test the serial version
-num_processes = [1, 2, 4, 8, 12, 16, 20, 24, 28, 32]  # MAX 48
+# num_processes = [1, 2, 4, 8, 12, 16, 20, 24, 28, 32]  # MAX 48 on Euler
+num_processes = [1, 2, 4, 8, 12]  # MAX 12 on Apple M3 Max
 
+num_nodes = [1, 2, 4, 8, 16, 32]  # MAX UNKNOWN on Euler
+# num_nodes = [1]  # MAX 1 on Apple M3 Max
 
-interfaces = {"std": "", "omp": "_omp", "mpi": "_mpi"}
+# interfaces = {"std": "", "omp": "_omp", "mpi": "_mpi"}
+interfaces = {"std": "", "omp": "_omp", "mpi": "_mpi", "omp+mpi": "_omp+mpi"}
 
 # Look into affinity, for now this is fine
 
@@ -33,15 +38,14 @@ omp_config = {
     "num_threads": num_processes,
     "total_memory": 15000,  # Memory is shared among threads. Guest users can use up to 128GB of data.
     "places": "cores",  # OMP_PLACES: cores (no hyperthreading) | threads (logical threads) | sockets | numa_domains
-    "proc_bind": "close",  # spread (spread out around threads/cores/sockets/NUMA domains) | close (as much as possible close to thread/core/same NUMA domains)
+    "proc_bind": "close"  # spread (spread out around threads/cores/sockets/NUMA domains) | close (as much as possible close to thread/core/same NUMA domains)
 }
 
 mpi_config = {
     "num_processes": num_processes,  # Guest users can only use up to 48 processors
-    "nodes": 2,
-    "total_memory": 60000,
+    "nodes": num_nodes,
+    "total_memory": 60000
 }
-
 
 parser = argparse.ArgumentParser(description="Python script that wraps PolyBench")
 parser.add_argument(
@@ -51,43 +55,36 @@ parser.add_argument(
     help="Kernels to run (default = all)",
     default=kernels.keys(),
 )
-
 parser.add_argument(
     "--interfaces",
     type=str,
     nargs="+",
     help="Interfaces to run (default = all) (selection: 'std', 'omp', 'mpi')",
     default=["std", "omp", "mpi", "omp+mpi"]
+    # default=["std", "omp", "mpi"]
 )
-
 parser.add_argument(
     "--no-compile", action="store_true", help="Generate makefiles and compile"
 )
-
 parser.add_argument(
     "--num-runs",
     type=int,
     help="Number of times to run the program",
     default=1,
 )
-
-
 parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output")
-
 parser.add_argument(
     "--size",
     type=int,
     help="Input size for the kernel (e.g., 10000, 25000, 40000)",
     default=None,
 )
-
 args = parser.parse_args()
 
 if args.size:
-    inputsizes["gemver"] = [{"N": args.size}]
+    inputsizes["gemver"]["N"] = args.size
+    inputsizes["jacobi-2d"]["N"] = args.size
 
-
-# # compile
 def compile(datasets):
     print(
         "**************************************************\n"
@@ -96,7 +93,6 @@ def compile(datasets):
     )
 
     lm_flag = ["cholesky", "gramschmidt", "correlation", "jacobi-2d"]
-
     extra_flags = ""
 
     for kernel in args.kernels:
@@ -124,7 +120,7 @@ def compile(datasets):
                 content += f"{kernel}{interfaces[interface]}.c ${{CFLAGS}} -I. -I{utilities_path} "
                 content += f"{pb_source_path} {inputsize_flags} ${{EXTRA_FLAGS}}"
                 # content += " -lnuma"
-                content += " -fopenmp" if interface == "omp" else ""
+                content += " -fopenmp" if interface == "omp" else "" # Only for omp, not for omp+mpi
                 content += "\n\n"
 
         content += "clean:\n"
@@ -165,13 +161,12 @@ def compile(datasets):
         if args.verbose:
             sys.stdout.write(make_process.stdout)
 
-
 def run_local(kernel, interface, p, filename, out_dir_run):
     for i in range(args.num_runs):
         cmd = [os.path.join(".", "bin", f"{filename}{interfaces[interface]}")]
-        if interface == "mpi":
+        if "mpi" in interface:
             cmd = ["mpiexec", "-np", str(p)] + cmd
-        elif interface == "omp":
+        if "omp" in interface:
             os.environ["OMP_NUM_THREADS"] = str(p)
 
         with (
@@ -202,10 +197,7 @@ def run_local(kernel, interface, p, filename, out_dir_run):
             sys.stderr.write(driver_process.stderr)
             sys.exit(1)
 
-
-def run_euler(kernel, interface, p, filename, out_dir_run):
-    # date = datetime.now().strftime("%Y_%m_%d__%H:%M:%S")
-
+def run_euler(kernel, interface, p, n, filename, out_dir_run):
     sbatch_dir = os.path.join(kernels[kernel], "sbatch")
     os.makedirs(sbatch_dir, exist_ok=True)
 
@@ -227,8 +219,8 @@ def run_euler(kernel, interface, p, filename, out_dir_run):
     # content += "#SBATCH --nodelist=eu-g9-028-4\n"
     content += f"#SBATCH --nodelist={','.join(nodelist)}\n"
 
-    if interface == "mpi":
-        content += f"#SBATCH --nodes={mpi_config['nodes']}\n"
+    if "mpi" in interface:
+        content += f"#SBATCH --nodes={n}\n"
         content += f"#SBATCH --ntasks={p}\n"
         content += f"#SBATCH --mem-per-cpu={int(mpi_config['total_memory']/p)}\n\n"
         content += "#SBATCH -C ib\n\n"
@@ -237,22 +229,23 @@ def run_euler(kernel, interface, p, filename, out_dir_run):
         content += "#SBATCH --ntasks=1\n"
         content += f"#SBATCH --cpus-per-task={p}\n"
         content += f"#SBATCH --mem-per-cpu={int(omp_config['total_memory']/p)}\n\n"
-
-        content += "export OMP_DISPLAY_ENV=TRUE\n"
-        content += f"export OMP_NUM_THREADS={p}\n"
-        content += f"export OMP_PLACES={omp_config['places']}\n"
-        content += f"export OMP_PROC_BIND={omp_config['proc_bind']}\n\n"
     else:
         content += "#SBATCH --nodes=1\n"
         content += "#SBATCH --ntasks=1\n"
         content += f"#SBATCH --mem-per-cpu={omp_config['total_memory']}\n\n"
+        
+    if "omp" in interface:
+        content += "export OMP_DISPLAY_ENV=TRUE\n"
+        content += f"export OMP_NUM_THREADS={p}\n"
+        content += f"export OMP_PLACES={omp_config['places']}\n"
+        content += f"export OMP_PROC_BIND={omp_config['proc_bind']}\n\n"
 
     content += (
         "module load stack/2024-06 openmpi/4.1.6 openblas/0.3.24 2> /dev/null\n\n"
     )
 
     content += f"for i in {{1..{args.num_runs}}}; do\n"
-    if interface == "mpi":
+    if "mpi" in interface:
         content += "srun "
 
     content += "perf stat " + binary_path + "\n"
@@ -293,7 +286,6 @@ def run_euler(kernel, interface, p, filename, out_dir_run):
         print(f"Error submitting job: {submission.stderr}")
         sys.exit(1)
 
-
 def run(datasets, on_euler):
     print(
         "**************************************************\n"
@@ -302,11 +294,7 @@ def run(datasets, on_euler):
     )
 
     date = datetime.now().strftime("%Y_%m_%d__%H-%M-%S")
-    if on_euler:
-        output_dir = os.path.join("outputs/euler", date)
-    else:
-        output_dir = os.path.join("outputs/local", date)
-
+    output_dir = os.path.join("outputs/%s" % ("euler" if on_euler else "local"), date)
     os.makedirs(output_dir, exist_ok=True)
 
     with open(os.path.join(output_dir, "inputsizes.json"), "w") as f:
@@ -314,70 +302,69 @@ def run(datasets, on_euler):
 
     for kernel in args.kernels:
         if args.verbose:
-            print(kernel)
+            print("Running kernel: %s" % kernel)
         for filename, _ in datasets[kernel].items():
             for interface in args.interfaces:
                 if args.verbose:
-                    print(interface)
+                    print("-Running interface: %s" % interface)
                 for p in num_processes:
                     if interface == "std" and p != 1 or interface != "std" and p == 1:
                         continue
+                    if args.verbose:
+                        print("--Running processes: %s" % p)
+                    for n in num_nodes:
+                        if interface == "mpi" and n == 1 or interface != "mpi" and n != 1:
+                            continue
+                        if args.verbose:
+                            print("---Running num_nodes: %s" % n)
 
-                    out_dir_run = os.path.join(
-                        output_dir, f"{filename}_np_{p}_{interface}"
-                    )
-
-                    os.makedirs(out_dir_run, exist_ok=True)
-
-                    if interface == "omp":
+                        out_dir_run = os.path.join(
+                            # np = number of processes, nn = number of nodes
+                            output_dir, f"{filename}_np_{p}_nn_{n}_{interface}"
+                        )
+                        os.makedirs(out_dir_run, exist_ok=True)
+                        
                         with open(
-                            os.path.join(output_dir, "omp.json"),
-                            "w",
-                        ) as f:
-                            json.dump(omp_config, f, indent=4)
-
-                    if interface == "mpi":
-                        with open(
-                            os.path.join(output_dir, "mpi.json"),
+                            os.path.join(output_dir, f"{interface}.json"),
                             "w",
                         ) as f:
                             json.dump(mpi_config, f, indent=4)
 
-                    # Local
-                    if on_euler:
-                        run_euler(
-                            kernel,
-                            interface,
-                            p,
-                            filename,
-                            out_dir_run,
-                        )
-                    # Euler
-                    else:
-                        run_local(
-                            kernel,
-                            interface,
-                            p,
-                            filename,
-                            out_dir_run,
-                        )
-                        # run_local()
+                        # Local
+                        if on_euler:
+                            run_euler(
+                                kernel,
+                                interface,
+                                p,
+                                n,
+                                filename,
+                                out_dir_run,
+                            )
+                        # Euler
+                        else:
+                            run_local(
+                                kernel,
+                                interface,
+                                p,
+                                filename,
+                                out_dir_run,
+                            )
 
 
 def main():
     datasets = {}
-
     # Generate necessary compiler flags based on datasets to test
     for kernel, sizes in inputsizes.items():
         datasets[kernel] = {}
-        for inputsize in sizes:
-            filename = f"{kernel}_"
-            flags = ""
-            for flag, val in inputsize.items():
-                filename += f"{flag}_{str(val)}_"
-                flags += f"-D{flag}={str(val)} "
-            filename = filename[:-1]
-            datasets[kernel][filename] = flags
+        filename = f"{kernel}"
+        flags = ""
+        for inputsize_key in sizes:
+            inputsize_value = sizes[inputsize_key]
+            filename += f"_{inputsize_key}_{str(inputsize_value)}"
+            if flags != "":
+                flags += " "
+            flags += f"-D{inputsize_key}={str(inputsize_value)}"
+        datasets[kernel][filename] = flags
 
     # Detect cluster
     cwd = os.getcwd()
