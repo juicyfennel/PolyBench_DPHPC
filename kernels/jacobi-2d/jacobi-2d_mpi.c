@@ -11,6 +11,18 @@
 /* Include benchmark-specific header. */
 #include "jacobi-2d.h"
 
+void flush_cache()
+{
+  int cs = 32770 * 1024 * 2 / sizeof(double);
+  double* flush = (double*) calloc (cs, sizeof(double));
+  int i;
+  double tmp = 0.0;
+  for (i = 0; i < cs; i++)
+    tmp += flush[i];
+  assert (tmp <= 10.0);
+  free (flush);
+}
+
 /* Array initialization. */
 static void init_array(int n, // Size of the total matrix
                        int start_row, // Start row of the block
