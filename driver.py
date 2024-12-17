@@ -21,8 +21,8 @@ inputsizes = {
 }
 
 # Number of processes to test, always include 1 if you want to test the serial version
-# num_processes = [1, 2, 4, 8, 12, 16, 20, 24, 28, 32]  # MAX 48 on Euler
-num_processes = [1, 2, 4, 8, 12]  # MAX 12 on Apple M3 Max
+num_processes = [1, 2, 4, 8, 12, 16, 20, 24, 28, 32]  # MAX 48 on Euler
+# num_processes = [1, 2, 4, 8, 12]  # MAX 12 on Apple M3 Max
 
 num_nodes = [1, 2, 4, 8, 16, 32]  # MAX UNKNOWN on Euler
 # num_nodes = [1]  # MAX 1 on Apple M3 Max
