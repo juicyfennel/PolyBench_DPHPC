@@ -1,18 +1,9 @@
-/**
- * This version is stamped on May 10, 2016
- *
- * Contact:
- *   Louis-Noel Pouchet <pouchet.ohio-state.edu>
- *   Tomofumi Yuki <tomofumi.yuki.fr>
- *
- * Web address: http://polybench.sourceforge.net
- */
-/* jacobi-2d.c: this file is part of PolyBench/C */
-
 #include <stdio.h>
 #include <unistd.h>
 #include <string.h>
+#include <time.h>
 #include <math.h>
+#include <assert.h>
 
 /* Include polybench common header. */
 #include <polybench.h>
@@ -20,6 +11,17 @@
 /* Include benchmark-specific header. */
 #include "jacobi-2d.h"
 
+void flush_cache()
+{
+  int cs = 32770 * 1024 * 2 / sizeof(double);
+  double* flush = (double*) calloc (cs, sizeof(double));
+  int i;
+  double tmp = 0.0;
+  for (i = 0; i < cs; i++)
+    tmp += flush[i];
+  assert (tmp <= 10.0);
+  free (flush);
+}
 
 /* Array initialization. */
 static
@@ -29,12 +31,12 @@ void init_array (int n,
 {
   int i, j;
 
-  for (i = 0; i < n; i++)
-    for (j = 0; j < n; j++)
-      {
-	A[i][j] = ((DATA_TYPE) i*(j+2) + 2) / n;
-	B[i][j] = ((DATA_TYPE) i*(j+3) + 3) / n;
-      }
+  for (i = 0; i < n; i++) {
+    for (j = 0; j < n; j++) { 
+      A[i][j] = ((DATA_TYPE) i*(j+2) + 2) / n;
+      B[i][j] = ((DATA_TYPE) i*(j+3) + 3) / n;
+    }
+  }
 }
 
 
@@ -71,15 +73,18 @@ void kernel_jacobi_2d(int tsteps,
   int t, i, j;
 
 #pragma scop
-  for (t = 0; t < _PB_TSTEPS; t++)
-    {
-      for (i = 1; i < _PB_N - 1; i++)
-	for (j = 1; j < _PB_N - 1; j++)
-	  B[i][j] = SCALAR_VAL(0.2) * (A[i][j] + A[i][j-1] + A[i][1+j] + A[1+i][j] + A[i-1][j]);
-      for (i = 1; i < _PB_N - 1; i++)
-	for (j = 1; j < _PB_N - 1; j++)
-	  A[i][j] = SCALAR_VAL(0.2) * (B[i][j] + B[i][j-1] + B[i][1+j] + B[1+i][j] + B[i-1][j]);
+  for (t = 0; t < _PB_TSTEPS; t++) {
+    for (i = 1; i < _PB_N - 1; i++) {
+	    for (j = 1; j < _PB_N - 1; j++) {
+	      B[i][j] = SCALAR_VAL(0.2) * (A[i][j] + A[i][j-1] + A[i][1+j] + A[1+i][j] + A[i-1][j]);
+      }
     }
+    for (i = 1; i < _PB_N - 1; i++) {
+	    for (j = 1; j < _PB_N - 1; j++) {
+	      A[i][j] = SCALAR_VAL(0.2) * (B[i][j] + B[i][j-1] + B[i][1+j] + B[1+i][j] + B[i-1][j]);
+      }
+    }
+  }
 #pragma endscop
 
 }
@@ -95,25 +100,23 @@ int main(int argc, char** argv)
   POLYBENCH_2D_ARRAY_DECL(A, DATA_TYPE, N, N, n, n);
   POLYBENCH_2D_ARRAY_DECL(B, DATA_TYPE, N, N, n, n);
 
-
   /* Initialize array(s). */
   init_array (n, POLYBENCH_ARRAY(A), POLYBENCH_ARRAY(B));
 
-  /* Start timer. */
-  polybench_start_instruments;
+  printf("N: %d\n", N);
 
-  /* Run kernel. */
+  flush_cache();
+
+  struct timespec start, end; 
+  clock_gettime(CLOCK_MONOTONIC_RAW, &start);
+  
   kernel_jacobi_2d(tsteps, n, POLYBENCH_ARRAY(A), POLYBENCH_ARRAY(B));
 
-  /* Stop and print timer. */
-  polybench_stop_instruments;
-  polybench_print_instruments;
+  clock_gettime(CLOCK_MONOTONIC_RAW, &end);
 
-  /* Prevent dead-code elimination. All live-out data must be printed
-     by the function call in argument. */
-  polybench_prevent_dce(print_array(n, POLYBENCH_ARRAY(A)));
+  printf("Time: %f\n", (end.tv_sec - start.tv_sec) + 1e-9 * (end.tv_nsec - start.tv_nsec));
 
-  /* Be clean. */
+  // Don't forget to free allocated memory
   POLYBENCH_FREE_ARRAY(A);
   POLYBENCH_FREE_ARRAY(B);
 
