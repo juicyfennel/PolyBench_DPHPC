@@ -63,14 +63,14 @@ def main():
     df = pd.read_csv(input_file)
 
     # Ensure required columns exist
-    required_columns = ['Size', 'Processes', 'Type', 'Mean Runtime', 'STD']
+    required_columns = ['Size', 'Processes', 'Nodes', 'Type', 'Mean Runtime', 'STD']
     for col in required_columns:
         if col not in df.columns:
             print(f"Error: Required column '{col}' is missing from the CSV.")
             exit(1)
 
     # Calculate speedup and efficiency
-    reference_runtime = df[(df['Processes'] == 1) & (df['Type'] == 'std')]['Mean Runtime'].iloc[0]
+    reference_runtime = df[(df['Processes'] == 1) & (df['Nodes'] == 1) & (df['Type'] == 'std')]['Mean Runtime'].iloc[0]
     df['Speedup'] = reference_runtime / df['Mean Runtime']
     df['Efficiency'] = df['Speedup'] / df['Processes']
 

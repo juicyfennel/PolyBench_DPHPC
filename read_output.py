@@ -53,13 +53,14 @@ dirs = [
 ]
 
 for dir in dirs:
-    match = re.match(r"^(?P<kernel>[A-Za-z0-9-]+)_N_(?P<size>\d+)_np_(?P<processes>\d+)_(?P<type>\w+)$", dir)
+    match = re.match(r"^(?P<kernel>[A-Za-z0-9-_]+)_N_(?P<size>\d+)_np_(?P<processes>\d+)_nn_(?P<nodes>\d+)_(?P<type>[\w+]+)$", dir)
     if not match:
         continue
 
     kernel = match.group("kernel")
     size = int(match.group("size"))
     num_processes = int(match.group("processes"))
+    num_nodes = int(match.group("nodes"))
     run_type = match.group("type")
 
     out_dir = os.path.join(output_dir, dir)
@@ -85,7 +86,7 @@ for dir in dirs:
                 except ValueError:
                     continue
 
-        if run_type == "mpi":
+        if "mpi" in run_type:
             runs = [
                 valid_lines[i:i + num_processes]
                 for i in range(0, len(valid_lines), num_processes)
@@ -101,6 +102,7 @@ for dir in dirs:
                 "Kernel": kernel,
                 "Size": size,
                 "Processes": num_processes,
+                "Nodes": num_nodes,
                 "Type": run_type,
                 "Mean Runtime": mean_runtime,
                 "STD": variability
@@ -113,6 +115,7 @@ for dir in dirs:
                     "Kernel": kernel,
                     "Size": size,
                     "Processes": num_processes,
+                    "Nodes": 1,
                     "Type": run_type,
                     "Mean Runtime": mean_runtime,
                     "STD": variability
@@ -125,6 +128,7 @@ for dir in dirs:
                     "Kernel": kernel,
                     "Size": size,
                     "Processes": 1,
+                    "Nodes": 1,
                     "Type": run_type,
                     "Mean Runtime": mean_runtime,
                     "STD": variability  
