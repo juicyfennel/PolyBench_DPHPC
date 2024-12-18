@@ -1,6 +1,7 @@
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 from datetime import datetime
@@ -13,15 +14,15 @@ kernels = {
 
 inputsizes = {
     "jacobi-2d": [{"TSTEPS": 500, "N": 3362}],
-    "gemver": [{"N": 10000}],
+    "gemver": [{"N": 40000}],
 }
 
 
 # Number of processes to test, always include 1 if you want to test the serial version
-num_processes = [1, 2, 4, 8, 12, 16, 20, 24, 28, 32]  # MAX 48
+num_processes = [2, 4, 8]  # MAX 48
 
 
-interfaces = {"std": "", "omp": "_omp", "mpi": "_mpi"}
+interfaces = {"std": "", "omp": "_omp", "mpi": "_mpi", "blas": "_blas"}
 
 # Look into affinity, for now this is fine
 
@@ -115,6 +116,13 @@ def compile(datasets):
 
         for filename, inputsize_flags in datasets[kernel].items():
             for interface in args.interfaces:
+                old_flags = inputsize_flags
+                # Take DPROBLEM_SIZE rather than DN
+                if interface == "blas":
+                    inputsize_flags = re.sub(
+                        r"-DN=(\d+)", r"-DPROBLEM_SIZE=\1", inputsize_flags
+                    )
+
                 content += f"{filename}_{interface}: {kernel}{interfaces[interface]}.c {kernel}.h\n"
                 content += "\t@mkdir -p bin\n\t${VERBOSE} "
                 content += "${MPI_CC}" if interface == "mpi" else "${CC}"
@@ -122,8 +130,12 @@ def compile(datasets):
                 content += f"{kernel}{interfaces[interface]}.c ${{CFLAGS}} -I. -I{utilities_path} "
                 content += f"{pb_source_path} {inputsize_flags} ${{EXTRA_FLAGS}}"
                 # content += " -lnuma"
-                content += " -fopenmp" if interface == "omp" else ""
+                content += (
+                    " -fopenmp " if interface == "omp" or interface == "blas" else ""
+                )
+                content += "-lopenblas " if interface == "blas" else ""
                 content += "\n\n"
+                inputsize_flags = old_flags  # Revert change
 
         content += "clean:\n"
         for filename, inputsize_flags in datasets[kernel].items():
@@ -220,6 +232,7 @@ def run_euler(kernel, interface, p, filename, out_dir_run):
     # content += "#SBATCH --mem-bind=local\n"
 
     nodelist = [f"eu-g9-0{i+1:02}-{j+1}" for i in range(48) for j in range(4)]
+    # nodelist = ["eu-g9-036-1", "eu-g9-036-2", "eu-g9-036-3", "eu-g9-036-4"]
     # nodelist = ["eu-g9-024-1", "eu-g9-024-2", "eu-g9-024-3", "eu-g9-024-4"]
 
     # content += "#SBATCH --nodelist=eu-g9-028-4\n"
@@ -231,7 +244,7 @@ def run_euler(kernel, interface, p, filename, out_dir_run):
         content += f"#SBATCH --mem-per-cpu={int(mpi_config['total_memory']/p)}\n\n"
         content += "#SBATCH -C ib\n\n"
 
-    elif interface == "omp":
+    elif interface == "omp" or interface == "blas":
         content += "#SBATCH --nodes=1\n"
         content += "#SBATCH --ntasks=1\n"
         content += f"#SBATCH --cpus-per-task={p}\n"
@@ -254,12 +267,16 @@ def run_euler(kernel, interface, p, filename, out_dir_run):
     if interface == "mpi":
         content += "srun "
 
-    content += "perf stat " + binary_path + "\n"
+    content += (
+        "perf stat -e task-clock,context-switches,cpu-migrations,page-faults,cycles,instructions,branches,branch-misses,stalled-cycles-frontend,stalled-cycles-backend,cache-references,cache-misses "
+        + binary_path
+        + "\n"
+    )
     content += 'echo "==============="\n'  # stdout
     content += 'echo "===============" >&2\n'  # stderr
     content += "done\n\n"
 
-    content += f"srun hostname > ./{out_dir_run}/hostname.txt\n"
+    content += f"hostname > ./{out_dir_run}/hostname.txt\n"
 
     # content += (
     #     f"for i in {{1..{args.num_runs}}}; do\n"
@@ -319,7 +336,7 @@ def run(datasets, on_euler):
                 if args.verbose:
                     print(interface)
                 for p in num_processes:
-                    if interface == "std" and p != 1 or interface != "std" and p == 1:
+                    if interface == "std" and p != 1:
                         continue
 
                     out_dir_run = os.path.join(
