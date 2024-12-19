@@ -47,14 +47,27 @@ omp_config = {
 mpi_config = {
     "num_processes": num_processes,  # Guest users can only use up to 48 processors
     "nodes": 2,
+    "total_memory": 15000,
+}
+
+mpi_gather_config = {
+    "num_processes": num_processes,  # Guest users can only use up to 48 processors
+    "nodes": 2,
     "total_memory": 100000,
 }
 
 mpi_omp_config = {
-    "num_ranks": 4,
-    "threads_per_rank": 4,
+    "num_ranks": [process for (process, thread) in processes_threads],
+    "threads_per_rank": [thread for (process, thread) in processes_threads],
     "nodes": 4,
     "total_memory": 15000,
+}
+
+mpi_omp_gather_config = {
+    "num_ranks": [process for (process, thread) in processes_threads],
+    "threads_per_rank": [thread for (process, thread) in processes_threads],
+    "nodes": 4,
+    "total_memory": 100000,
 }
 
 
@@ -259,15 +272,14 @@ def run_euler(kernel, interface, p, filename, out_dir_run, t=1):
     # content += "#SBATCH --nodelist=eu-g9-028-4\n"
     content += f"#SBATCH --nodelist={','.join(nodelist)}\n"
 
-    memory = int(math.ceil(20000 * 20000 * 8 / (1024 * 1024) + 20000 * 10 * 8 / (1024 * 1024))) #A and vectors upper bound
 
     if interface=="mpi" or interface=="mpi_gather": 
         content += f"#SBATCH --nodes={mpi_config['nodes']}\n"
         content += f"#SBATCH --ntasks={p}\n"
         if interface == "mpi":
-            content += f"#SBATCH --mem-per-cpu={int(memory/p)}\n\n"
+            content += f"#SBATCH --mem-per-cpu={int(mpi_config['total_memory']/p)}\n\n"
         if interface == "mpi_gather":
-            content += f"#SBATCH --mem-per-cpu={memory}\n\n"
+            content += f"#SBATCH --mem-per-cpu={int(mpi_gather_config['total_memory']/p)}\n\n"
         # content += "#SBATCH -C ib\n\n"
 
     elif interface == "omp" or interface == "blas":
@@ -288,9 +300,9 @@ def run_euler(kernel, interface, p, filename, out_dir_run, t=1):
         content += "export OMP_DISPLAY_ENV=TRUE\n"
         content += f"export OMP_NUM_THREADS={t}\n"
         if interface == "mpi+omp":
-            content += f"#SBATCH --mem-per-cpu={int(memory/p)}\n\n"
+            content += f"#SBATCH --mem-per-cpu={int(mpi_omp_config['total_memory']/(p*t))}\n\n"
         else:
-            content += f"#SBATCH --mem-per-cpu={int(memory)}\n\n"
+            content += f"#SBATCH --mem-per-cpu={int(mpi_omp_gather_config['total_memory']/(p*t))}\n\n"
 
     else:
         content += "#SBATCH --nodes=1\n"
@@ -378,7 +390,7 @@ def run(datasets, on_euler):
                         p = pair[0]
                         t = pair[1]
                         out_dir_run = os.path.join(
-                            output_dir, f"{filename}_np_{p}_nt_{t}_{interface}"
+                            output_dir, f"{filename}_np_{p*t}_{interface}"
                         )
                         os.makedirs(out_dir_run, exist_ok=True)
                         if interface == "mpi+omp":
@@ -392,7 +404,7 @@ def run(datasets, on_euler):
                                 os.path.join(output_dir, "mpi_omp_gather.json"),
                                 "w",
                             ) as f:
-                                json.dump(mpi_omp_config, f, indent=4)
+                                json.dump(mpi_omp_gather_config, f, indent=4)
                         if on_euler:
                             run_euler(
                                 kernel,
@@ -442,7 +454,7 @@ def run(datasets, on_euler):
                             os.path.join(output_dir, "mpi_gather.json"),
                             "w",
                         ) as f:
-                            json.dump(mpi_config, f, indent=4)
+                            json.dump(mpi_gather_config, f, indent=4)
 
                     # Local
                     if on_euler:

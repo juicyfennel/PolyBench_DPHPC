@@ -169,14 +169,6 @@ int main(int argc, char** argv) {
     int start_row = rank * rows_per_task + (rank < remainder ? rank : remainder);
     int num_rows = rows_per_task + (rank < remainder ? 1 : 0);
 
-    #pragma omp parallel 
-    {
-        int thread_id = omp_get_thread_num(); // Get the thread number within the team
-        int num_threads = omp_get_num_threads(); // Get the total number of threads in the team
-        
-        printf("Hello from MPI rank %d out of %d, OpenMP thread %d out of %d\n", 
-               rank, size, thread_id, num_threads);
-    }
 
     /* Variable declaration/allocation. */
     DATA_TYPE alpha;
