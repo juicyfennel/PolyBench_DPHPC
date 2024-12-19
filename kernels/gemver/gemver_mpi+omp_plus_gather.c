@@ -169,14 +169,6 @@ int main(int argc, char** argv) {
     int start_row = rank * rows_per_task + (rank < remainder ? rank : remainder);
     int num_rows = rows_per_task + (rank < remainder ? 1 : 0);
 
-    #pragma omp parallel 
-    {
-        int thread_id = omp_get_thread_num(); // Get the thread number within the team
-        int num_threads = omp_get_num_threads(); // Get the total number of threads in the team
-        
-        printf("Hello from MPI rank %d out of %d, OpenMP thread %d out of %d\n", 
-               rank, size, thread_id, num_threads);
-    }
 
     /* Variable declaration/allocation. */
     DATA_TYPE alpha;
@@ -188,8 +180,8 @@ int main(int argc, char** argv) {
     MALLOC_1D(y, DATA_TYPE, num_rows);
     MALLOC_1D(z, DATA_TYPE, num_rows);
     MALLOC_1D(x, DATA_TYPE, N);
-    MALLOC_1D(w, DATA_TYPE, num_rows);
-    MALLOC_2D(A, DATA_TYPE, num_rows, N);
+    MALLOC_1D(w, DATA_TYPE, rank == 0 ? N : num_rows);
+    MALLOC_2D(A, DATA_TYPE, rank == 0 ? N : num_rows, N);
     
     double total_time = 0.0;
     
