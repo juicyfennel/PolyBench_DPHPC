@@ -98,7 +98,7 @@ void kernel_gemver(DATA_TYPE alpha,
     DATA_TYPE *A) {
     int i, j; 
     
-    #pragma omp for
+    #pragma omp parallel for
     for (i = 0; i < N; i++)
         for (j = 0; j < N; j++)
         //A[i * N + j] = A[i * N + j] + u1[i] * v1[j] + u2[i] * v2[j];
@@ -111,12 +111,12 @@ void kernel_gemver(DATA_TYPE alpha,
   //     }
   //     printf("\n");
   //  }
-    #pragma omp for
+    #pragma omp parallel for
     for (i = 0; i < N; i++)
         for (j = 0; j < N; j++)
             x[i] = x[i] + beta * IDX_2D(A, j, i, N)*y[j];
 
-    #pragma omp for
+    #pragma omp parallel for
     for (i = 0; i < N; i++)
         x[i] = x[i] + z[i];
 
@@ -125,7 +125,7 @@ void kernel_gemver(DATA_TYPE alpha,
     //     printf("%f ", x[i]);
     // }
     // printf("\n");
-    #pragma omp for
+    #pragma omp parallel for
     for (i = 0; i < N; i++)
         for (j = 0; j < N; j++)
         w[i] = w[i] +  alpha * IDX_2D(A, i, j, N) * x[j];
@@ -160,57 +160,11 @@ int main(int argc, char** argv) {
     flush_cache();
 
     struct timespec start, end; 
-    #pragma omp parallel
-    {
-    #pragma omp master
-    {
-        clock_gettime(CLOCK_MONOTONIC_RAW, &start);
-    }
-    int i, j;
+    clock_gettime(CLOCK_MONOTONIC_RAW, &start);
     
-    #pragma omp for
-    for (i = 0; i < N; i++)
-        for (j = 0; j < N; j++)
-        //A[i * N + j] = A[i * N + j] + u1[i] * v1[j] + u2[i] * v2[j];
-        IDX_2D(A, i, j, N) = IDX_2D(A, i, j, N) + u1[i] * v1[j] + u2[i] * v2[j];
-    
-  //   printf("Gathered A_hat:\n");
-  //   for (int i = 0; i < N; i++) {
-  //       for (int j = 0; j < N; j++) {
-  //           printf("%f ", IDX_2D(A, i, j, N));
-  //     }
-  //     printf("\n");
-  //  }
-    #pragma omp for
-    for (i = 0; i < N; i++)
-        for (j = 0; j < N; j++)
-            x[i] = x[i] + beta * IDX_2D(A, j, i, N)*y[j];
+    kernel_gemver(alpha, beta, u1, u2, v1, v2, y, z, x, w, A); 
 
-    #pragma omp for
-    for (i = 0; i < N; i++)
-        x[i] = x[i] + z[i];
-
-    // printf("Gathered x:\n");
-    // for (int i = 0; i < N; i++) {
-    //     printf("%f ", x[i]);
-    // }
-    // printf("\n");
-    #pragma omp for
-    for (i = 0; i < N; i++)
-        for (j = 0; j < N; j++)
-        w[i] = w[i] +  alpha * IDX_2D(A, i, j, N) * x[j];
-
-    // printf("Gathered w:\n");
-    // for (int i = 0; i < N; i++) {
-    //     printf("%f ", w[i]);
-    // }
-    // printf("\n");
-    #pragma omp master
-    {
-        clock_gettime(CLOCK_MONOTONIC_RAW, &end);
-    }
-
-    }
+    clock_gettime(CLOCK_MONOTONIC_RAW, &end);
 
     printf("Time: %f\n", (end.tv_sec - start.tv_sec) + 1e-9 * (end.tv_nsec - start.tv_nsec));
 
