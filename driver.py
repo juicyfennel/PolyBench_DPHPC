@@ -14,19 +14,16 @@ kernels = {
 
 inputsizes = {
     "jacobi-2d": [{"TSTEPS": 500, "N": 3362}],
-    "gemver": [{"N": 40000}],
+    "gemver": [{"N": 20000}],
 }
 
 
 # Number of processes to test, always include 1 if you want to test the serial version
-<<<<<<< HEAD
-num_processes = [2, 4, 8]  # MAX 48
-=======
-num_processes = [1, 2, 4]  # MAX 48
->>>>>>> origin/dev/pascal
+num_processes = [1, 2, 4, 8, 12, 16, 20, 24, 28, 32]  # MAX 48
+# num_processes = [1, 2, 4, 8]  # MAX 48
 
 
-interfaces = {"std": "", "omp": "_omp", "mpi": "_mpi", "blas": "_blas"}
+interfaces = {"std": "", "omp": "_omp", "mpi": "_mpi", "blas": "_blas", "mpi_gather": "_mpi_plus_gather"}
 
 # Look into affinity, for now this is fine
 
@@ -42,7 +39,7 @@ omp_config = {
 mpi_config = {
     "num_processes": num_processes,  # Guest users can only use up to 48 processors
     "nodes": 2,
-    "total_memory": 60000,
+    "total_memory": 100000,
 }
 
 
@@ -118,8 +115,6 @@ def compile(datasets):
 
         content += "\n\n"
 
-        timestamp = datetime.now().strftime("%Y_%m_%d__%H-%M-%S")
-
         for filename, inputsize_flags in datasets[kernel].items():
             for interface in args.interfaces:
                 old_flags = inputsize_flags
@@ -131,8 +126,8 @@ def compile(datasets):
 
                 content += f"{filename}_{interface}: {kernel}{interfaces[interface]}.c {kernel}.h\n"
                 content += "\t@mkdir -p bin\n\t${VERBOSE} "
-                content += "${MPI_CC}" if interface == "mpi" else "${CC}"
-                content += f" -o bin/{filename}{interfaces[interface]}_{timestamp} "
+                content += "${MPI_CC}" if interface.startswith("mpi") else "${CC}"
+                content += f" -o bin/{filename}{interfaces[interface]} "
                 content += f"{kernel}{interfaces[interface]}.c ${{CFLAGS}} -I. -I{utilities_path} "
                 content += f"{pb_source_path} {inputsize_flags} ${{EXTRA_FLAGS}}"
                 # content += " -lnuma"
@@ -146,7 +141,7 @@ def compile(datasets):
         content += "clean:\n"
         for filename, inputsize_flags in datasets[kernel].items():
             for interface in args.interfaces:
-                content += f"\t@rm -f bin/{filename}{interfaces[interface]}_{timestamp}\n"
+                content += f"\t@rm -f bin/{filename}{interfaces[interface]}\n"
 
         with open(os.path.join(kernels[kernel], "Makefile"), "w") as makefile:
             makefile.write(content)
@@ -185,7 +180,7 @@ def compile(datasets):
 def run_local(kernel, interface, p, filename, out_dir_run):
     for i in range(args.num_runs):
         cmd = [os.path.join(".", "bin", f"{filename}{interfaces[interface]}")]
-        if interface == "mpi":
+        if interface.startswith("mpi"):
             cmd = ["mpiexec", "-np", str(p)] + cmd
         elif interface == "omp":
             os.environ["OMP_NUM_THREADS"] = str(p)
@@ -244,7 +239,7 @@ def run_euler(kernel, interface, p, filename, out_dir_run):
     # content += "#SBATCH --nodelist=eu-g9-028-4\n"
     content += f"#SBATCH --nodelist={','.join(nodelist)}\n"
 
-    if interface == "mpi":
+    if interface.startswith("mpi"):
         content += f"#SBATCH --nodes={mpi_config['nodes']}\n"
         content += f"#SBATCH --ntasks={p}\n"
         content += f"#SBATCH --mem-per-cpu={int(mpi_config['total_memory']/p)}\n\n"
@@ -270,7 +265,7 @@ def run_euler(kernel, interface, p, filename, out_dir_run):
     )
 
     content += f"for i in {{1..{args.num_runs}}}; do\n"
-    if interface == "mpi":
+    if interface.startswith("mpi"):
         content += "srun "
 
     content += (
@@ -342,8 +337,11 @@ def run(datasets, on_euler):
                 if args.verbose:
                     print(interface)
                 for p in num_processes:
-                    if interface == "std" and p != 1:
-                        continue
+                    if interface == "std":
+                        if p != 1:
+                            continue
+                    elif (interface == "omp" or interface.startswith("mpi")) and p == 1:  # anything other but p = 1
+                        continue 
 
                     out_dir_run = os.path.join(
                         output_dir, f"{filename}_np_{p}_{interface}"
@@ -361,6 +359,12 @@ def run(datasets, on_euler):
                     if interface == "mpi":
                         with open(
                             os.path.join(output_dir, "mpi.json"),
+                            "w",
+                        ) as f:
+                            json.dump(mpi_config, f, indent=4)
+                    if interface == "mpi_gather":
+                        with open(
+                            os.path.join(output_dir, "mpi_gather.json"),
                             "w",
                         ) as f:
                             json.dump(mpi_config, f, indent=4)

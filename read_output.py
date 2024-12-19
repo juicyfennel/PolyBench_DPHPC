@@ -85,7 +85,7 @@ for dir in dirs:
                 except ValueError:
                     continue
 
-        if run_type == "mpi":
+        if run_type.startswith("mpi"):
             runs = [
                 valid_lines[i:i + num_processes]
                 for i in range(0, len(valid_lines), num_processes)

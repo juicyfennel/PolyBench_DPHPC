@@ -10,6 +10,8 @@
 #define N 25000
 #endif
 
+#define ITERATIONS 10
+
 // Data type
 #define DATA_TYPE double
 #define MPI_DATA_TYPE MPI_DOUBLE
@@ -175,81 +177,86 @@ int main(int argc, char** argv) {
     MALLOC_1D(x, DATA_TYPE, N);
     MALLOC_1D(w, DATA_TYPE, rank == 0 ? N : num_rows);
     MALLOC_2D(A, DATA_TYPE, rank == 0 ? N : num_rows, N);
+
+    double total_time = 0.0;
+
+    for (int i=0;i<ITERATIONS;i++){
     
-    /* Initialize array(s). */
-    // Step 2: Initialize the local arrays
-    init_data(&alpha, &beta, u1, u2, v1, v2, y, z, x, w, A,start_row,num_rows);
-    
-    // printf("N: %d\n", N);
-    // printf("%f", IDX_1D(x, 9));
-    
-    flush_cache();
+        /* Initialize array(s). */
+        // Step 2: Initialize the local arrays
+        init_data(&alpha, &beta, u1, u2, v1, v2, y, z, x, w, A,start_row,num_rows);
+        
+        // printf("N: %d\n", N);
+        // printf("%f", IDX_1D(x, 9));
+        
+        flush_cache();
 
-    struct timespec start, end; 
-    clock_gettime(CLOCK_MONOTONIC_RAW, &start);
-    
-    kernel_gemver(alpha, beta, u1, u2, v1, v2, y, z, x, w, A,start_row,num_rows); 
+        struct timespec start, end; 
+        clock_gettime(CLOCK_MONOTONIC_RAW, &start);
+        
+        kernel_gemver(alpha, beta, u1, u2, v1, v2, y, z, x, w, A,start_row,num_rows); 
 
-    clock_gettime(CLOCK_MONOTONIC_RAW, &end);
+        clock_gettime(CLOCK_MONOTONIC_RAW, &end);
 
-    double time = (end.tv_sec - start.tv_sec) + 1e-9 * (end.tv_nsec - start.tv_nsec);
+        total_time += (end.tv_sec - start.tv_sec) + 1e-9 * (end.tv_nsec - start.tv_nsec);
 
 
-    // Step 7: Gather the computed A and w in rank 0
-    clock_gettime(CLOCK_MONOTONIC_RAW, &start);
-    MALLOC_1D(sendcounts, int, size);
-    MALLOC_1D(displs, int, size);
-    int offset = 0;
+        // Step 7: Gather the computed A and w in rank 0
+        clock_gettime(CLOCK_MONOTONIC_RAW, &start);
+        MALLOC_1D(sendcounts, int, size);
+        MALLOC_1D(displs, int, size);
+        int offset = 0;
 
-    //TODO: Gather in size-1 since it should be finished computing rows the earliest
-    for(int i = 0; i < size; i++) {
-        int rows = rows_per_task + (i < remainder ? 1 : 0);
-        sendcounts[i] = rows * n;
-        displs[i] = offset;
-        offset += rows * n;
+        //TODO: Gather in size-1 since it should be finished computing rows the earliest
+        for(int i = 0; i < size; i++) {
+            int rows = rows_per_task + (i < remainder ? 1 : 0);
+            sendcounts[i] = rows * n;
+            displs[i] = offset;
+            offset += rows * n;
+        }
+
+        //Gather the results
+
+        if (rank == 0) {
+            // Root process uses MPI_IN_PLACE
+            MPI_Gatherv(MPI_IN_PLACE, 0, MPI_DATA_TYPE,
+                        A, sendcounts, displs, MPI_DATA_TYPE,
+                        0, MPI_COMM_WORLD);
+        } else {
+            // Non-root processes send their portion
+            MPI_Gatherv(A, sendcounts[rank], MPI_DATA_TYPE,
+                        A, sendcounts, displs, MPI_DATA_TYPE,
+                        0, MPI_COMM_WORLD);
+        }
+
+        offset = 0; 
+        for (int i = 0; i < size; i++) {
+            int rows = rows_per_task + (i < remainder ? 1 : 0);
+            sendcounts[i] = rows;
+            displs[i] = offset;
+            offset += rows;
+        }
+        
+        // Gather the results
+
+        if (rank == 0) {
+            // Root process uses MPI_IN_PLACE
+            MPI_Gatherv(MPI_IN_PLACE, 0, MPI_DATA_TYPE,
+                        w, sendcounts, displs, MPI_DATA_TYPE,
+                        0, MPI_COMM_WORLD);
+        } else {
+            // Non-root processes send their portion
+            MPI_Gatherv(w, sendcounts[rank], MPI_DATA_TYPE,
+                        w, sendcounts, displs, MPI_DATA_TYPE,
+                        0, MPI_COMM_WORLD);
+        }
+
+        clock_gettime(CLOCK_MONOTONIC_RAW, &end);
+        
+        total_time += (end.tv_sec - start.tv_sec) + 1e-9 * (end.tv_nsec - start.tv_nsec);
     }
-
-    //Gather the results
-
-    if (rank == 0) {
-        // Root process uses MPI_IN_PLACE
-        MPI_Gatherv(MPI_IN_PLACE, 0, MPI_DATA_TYPE,
-                    A, sendcounts, displs, MPI_DATA_TYPE,
-                    0, MPI_COMM_WORLD);
-    } else {
-        // Non-root processes send their portion
-        MPI_Gatherv(A, sendcounts[rank], MPI_DATA_TYPE,
-                    A, sendcounts, displs, MPI_DATA_TYPE,
-                    0, MPI_COMM_WORLD);
-    }
-
-    offset = 0; 
-    for (int i = 0; i < size; i++) {
-        int rows = rows_per_task + (i < remainder ? 1 : 0);
-        sendcounts[i] = rows;
-        displs[i] = offset;
-        offset += rows;
-    }
     
-    // Gather the results
-
-    if (rank == 0) {
-        // Root process uses MPI_IN_PLACE
-        MPI_Gatherv(MPI_IN_PLACE, 0, MPI_DATA_TYPE,
-                    w, sendcounts, displs, MPI_DATA_TYPE,
-                    0, MPI_COMM_WORLD);
-    } else {
-        // Non-root processes send their portion
-        MPI_Gatherv(w, sendcounts[rank], MPI_DATA_TYPE,
-                    w, sendcounts, displs, MPI_DATA_TYPE,
-                    0, MPI_COMM_WORLD);
-    }
-
-    clock_gettime(CLOCK_MONOTONIC_RAW, &end);
-    
-    time += (end.tv_sec - start.tv_sec) + 1e-9 * (end.tv_nsec - start.tv_nsec);
-    
-    printf("Rank %d, Time: %f\n", rank,time);
+    printf("Rank %d, Time: %f\n", rank,total_time);
     
 
 

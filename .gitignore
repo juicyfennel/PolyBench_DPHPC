@@ -43,5 +43,4 @@ runtime_analysis/*
 # Runs both local and Euler
 myRuns/*
 
-# Plots 
 plotting_and_data/*
