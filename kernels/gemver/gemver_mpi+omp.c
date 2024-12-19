@@ -209,11 +209,13 @@ int main(int argc, char** argv) {
         
         kernel_gemver(alpha, beta, u1, u2, v1, v2, y, z, x, w, A,start_row,num_rows); 
 
+        clock_gettime(CLOCK_MONOTONIC_RAW, &end);
+        
         total_time += (end.tv_sec - start.tv_sec) + 1e-9 * (end.tv_nsec - start.tv_nsec);
     }
 
     printf("Rank %d, Time: %f\n", rank, total_time);
-    
+
     // check that A is computed correctly
 //    printf("Rows %d - %d, Gathered A:\n", start_row, start_row + num_rows-1);
 //    for (int i = 0; i < num_rows; i++) {

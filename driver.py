@@ -1,5 +1,6 @@
 import argparse
 import json
+import math
 import os
 import re
 import subprocess
@@ -19,9 +20,9 @@ inputsizes = {
 
 
 # Number of processes to test, always include 1 if you want to test the serial version
-num_processes = [1, 2, 4]  # MAX 48
+num_processes = [1, 2, 4, 8, 12, 16, 24, 32]  # MAX 48
 # num_processes = [1, 2, 4, 8]  # MAX 48
-processes_threads = [(2,1), (2,2), (4,2), (4,4), (8,2), (8,4)]
+processes_threads = [(2,1), (2,2), (4,2), (4,3), (4,4), (6,4), (8,4)] #20 24 28  32
 
 interfaces = {
     "std": "",
@@ -258,10 +259,15 @@ def run_euler(kernel, interface, p, filename, out_dir_run, t=1):
     # content += "#SBATCH --nodelist=eu-g9-028-4\n"
     content += f"#SBATCH --nodelist={','.join(nodelist)}\n"
 
+    memory = int(math.ceil(20000 * 20000 * 8 / (1024 * 1024) + 20000 * 10 * 8 / (1024 * 1024))) #A and vectors upper bound
+
     if interface=="mpi" or interface=="mpi_gather": 
         content += f"#SBATCH --nodes={mpi_config['nodes']}\n"
         content += f"#SBATCH --ntasks={p}\n"
-        content += f"#SBATCH --mem-per-cpu={int(mpi_config['total_memory']/p)}\n\n"
+        if interface == "mpi":
+            content += f"#SBATCH --mem-per-cpu={int(memory/p)}\n\n"
+        if interface == "mpi_gather":
+            content += f"#SBATCH --mem-per-cpu={memory}\n\n"
         # content += "#SBATCH -C ib\n\n"
 
     elif interface == "omp" or interface == "blas":
@@ -282,9 +288,9 @@ def run_euler(kernel, interface, p, filename, out_dir_run, t=1):
         content += "export OMP_DISPLAY_ENV=TRUE\n"
         content += f"export OMP_NUM_THREADS={t}\n"
         if interface == "mpi+omp":
-            content += f"#SBATCH --mem-per-cpu={int(mpi_omp_config['total_memory']/(p * t))}\n\n"
+            content += f"#SBATCH --mem-per-cpu={int(memory/p)}\n\n"
         else:
-            content += f"#SBATCH --mem-per-cpu={int(mpi_config['total_memory']/(p * t))}\n\n"
+            content += f"#SBATCH --mem-per-cpu={int(memory)}\n\n"
 
     else:
         content += "#SBATCH --nodes=1\n"
@@ -405,13 +411,11 @@ def run(datasets, on_euler):
                                 out_dir_run,
                                 t,
                             )
-                        continue
+                    continue
 
                 for i, p in enumerate(num_processes):
                     # Only run single mpi + omp run, even if multiple # processors are specified -- really ugly hacky hack that will be fixed soon
-                    if (i != 0 and (interface == "mpi+omp" or interface == interface == "mpi+omp_gather")) or (
-                        interface == "std" and p != 1
-                    ):
+                    if (interface == "std" and p != 1):
                         continue
 
                     out_dir_run = os.path.join(
