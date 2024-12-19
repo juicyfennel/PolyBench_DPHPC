@@ -201,7 +201,7 @@ int main(int argc, char** argv) {
         total_time += (end.tv_sec - start.tv_sec) + 1e-9 * (end.tv_nsec - start.tv_nsec);
     }
 
-    printf("Rank %d, Time: %f\n", total_time);
+    printf("Rank %d, Time: %f\n", rank, total_time);
 
     // check that A is computed correctly
 //    printf("Rows %d - %d, Gathered A:\n", start_row, start_row + num_rows-1);
