@@ -113,7 +113,7 @@ void kernel_gemver(DATA_TYPE alpha,
 
       // If L1 cache is 32 KB and A, v1, and v2 are double-precision (8 bytes), you want B * B * 8 to fit in cache.
       int B = 64;
-      #pragma omp for collapse(2) schedule(static, 64)
+      #pragma omp for schedule(static, 64)
       for (int ii = 0; ii < N; ii += B) {
           for (int jj = 0; jj < N; jj += B) {
               for (int i = ii; i < ii + B && i < N; i++) {
