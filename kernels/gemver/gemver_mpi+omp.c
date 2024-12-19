@@ -169,14 +169,6 @@ int main(int argc, char** argv) {
     int start_row = rank * rows_per_task + (rank < remainder ? rank : remainder);
     int num_rows = rows_per_task + (rank < remainder ? 1 : 0);
 
-    #pragma omp parallel 
-    {
-        int thread_id = omp_get_thread_num(); // Get the thread number within the team
-        int num_threads = omp_get_num_threads(); // Get the total number of threads in the team
-        
-        printf("Hello from MPI rank %d out of %d, OpenMP thread %d out of %d\n", 
-               rank, size, thread_id, num_threads);
-    }
 
     /* Variable declaration/allocation. */
     DATA_TYPE alpha;
@@ -207,15 +199,15 @@ int main(int argc, char** argv) {
         struct timespec start, end; 
         clock_gettime(CLOCK_MONOTONIC_RAW, &start);
         
-        kernel_gemver(alpha, beta, u1, u2, v1, v2, y, z, x, w, A,start_row,num_rows);
+        kernel_gemver(alpha, beta, u1, u2, v1, v2, y, z, x, w, A,start_row,num_rows); 
 
         clock_gettime(CLOCK_MONOTONIC_RAW, &end);
-
+        
         total_time += (end.tv_sec - start.tv_sec) + 1e-9 * (end.tv_nsec - start.tv_nsec);
     }
 
     printf("Rank %d, Time: %f\n", rank, total_time);
-    
+
     // check that A is computed correctly
 //    printf("Rows %d - %d, Gathered A:\n", start_row, start_row + num_rows-1);
 //    for (int i = 0; i < num_rows; i++) {
