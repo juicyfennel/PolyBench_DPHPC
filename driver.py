@@ -13,12 +13,12 @@ kernels = {
 
 inputsizes = {
     "jacobi-2d": [{"TSTEPS": 500, "N": 3362}],
-    "gemver": [{"N": 10000}],
+    "gemver": [{"N": 40000}],
 }
 
 
 # Number of processes to test, always include 1 if you want to test the serial version
-num_processes = [1, 2, 4]  # MAX 48
+num_processes = [1, 2, 4, 8, 12, 16, 20, 24, 28, 32]  # MAX 48
 
 
 interfaces = {"std": "", "omp": "_omp", "mpi": "_mpi"}
@@ -113,14 +113,12 @@ def compile(datasets):
 
         content += "\n\n"
 
-        timestamp = datetime.now().strftime("%Y_%m_%d__%H-%M-%S")
-
         for filename, inputsize_flags in datasets[kernel].items():
             for interface in args.interfaces:
                 content += f"{filename}_{interface}: {kernel}{interfaces[interface]}.c {kernel}.h\n"
                 content += "\t@mkdir -p bin\n\t${VERBOSE} "
                 content += "${MPI_CC}" if interface == "mpi" else "${CC}"
-                content += f" -o bin/{filename}{interfaces[interface]}_{timestamp} "
+                content += f" -o bin/{filename}{interfaces[interface]} "
                 content += f"{kernel}{interfaces[interface]}.c ${{CFLAGS}} -I. -I{utilities_path} "
                 content += f"{pb_source_path} {inputsize_flags} ${{EXTRA_FLAGS}}"
                 # content += " -lnuma"
@@ -130,7 +128,7 @@ def compile(datasets):
         content += "clean:\n"
         for filename, inputsize_flags in datasets[kernel].items():
             for interface in args.interfaces:
-                content += f"\t@rm -f bin/{filename}{interfaces[interface]}_{timestamp}\n"
+                content += f"\t@rm -f bin/{filename}{interfaces[interface]}\n"
 
         with open(os.path.join(kernels[kernel], "Makefile"), "w") as makefile:
             makefile.write(content)
