@@ -14,15 +14,21 @@ kernels = {
 
 inputsizes = {
     "jacobi-2d": [{"TSTEPS": 500, "N": 3362}],
-    "gemver": [{"N": 40000}],
+    "gemver": [{"N": 10000}],
 }
 
 
 # Number of processes to test, always include 1 if you want to test the serial version
-num_processes = [2, 4, 8]  # MAX 48
+num_processes = [1, 2, 4]  # MAX 48
 
 
-interfaces = {"std": "", "omp": "_omp", "mpi": "_mpi", "blas": "_blas"}
+interfaces = {
+    "std": "",
+    "omp": "_omp",
+    "mpi": "_mpi",
+    "blas": "_blas",
+    "mpi+omp": "_mpi+omp",
+}
 
 # Look into affinity, for now this is fine
 
@@ -39,6 +45,13 @@ mpi_config = {
     "num_processes": num_processes,  # Guest users can only use up to 48 processors
     "nodes": 2,
     "total_memory": 60000,
+}
+
+mpi_omp_config = {
+    "num_ranks": 4,
+    "threads_per_rank": 4,
+    "nodes": 4,
+    "total_memory": 15000,
 }
 
 
@@ -125,13 +138,21 @@ def compile(datasets):
 
                 content += f"{filename}_{interface}: {kernel}{interfaces[interface]}.c {kernel}.h\n"
                 content += "\t@mkdir -p bin\n\t${VERBOSE} "
-                content += "${MPI_CC}" if interface == "mpi" else "${CC}"
+                content += (
+                    "${MPI_CC}"
+                    if interface == "mpi" or interface == "mpi+omp"
+                    else "${CC}"
+                )
                 content += f" -o bin/{filename}{interfaces[interface]} "
                 content += f"{kernel}{interfaces[interface]}.c ${{CFLAGS}} -I. -I{utilities_path} "
                 content += f"{pb_source_path} {inputsize_flags} ${{EXTRA_FLAGS}}"
                 # content += " -lnuma"
                 content += (
-                    " -fopenmp " if interface == "omp" or interface == "blas" else ""
+                    " -fopenmp "
+                    if interface == "omp"
+                    or interface == "blas"
+                    or interface == "mpi+omp"
+                    else ""
                 )
                 content += "-lopenblas " if interface == "blas" else ""
                 content += "\n\n"
@@ -242,7 +263,7 @@ def run_euler(kernel, interface, p, filename, out_dir_run):
         content += f"#SBATCH --nodes={mpi_config['nodes']}\n"
         content += f"#SBATCH --ntasks={p}\n"
         content += f"#SBATCH --mem-per-cpu={int(mpi_config['total_memory']/p)}\n\n"
-        content += "#SBATCH -C ib\n\n"
+        # content += "#SBATCH -C ib\n\n"
 
     elif interface == "omp" or interface == "blas":
         content += "#SBATCH --nodes=1\n"
@@ -254,6 +275,15 @@ def run_euler(kernel, interface, p, filename, out_dir_run):
         content += f"export OMP_NUM_THREADS={p}\n"
         content += f"export OMP_PLACES={omp_config['places']}\n"
         content += f"export OMP_PROC_BIND={omp_config['proc_bind']}\n\n"
+
+    elif interface == "mpi+omp":
+        content += f"#SBATCH --nodes={mpi_omp_config['nodes']}\n"
+        content += f"#SBATCH --ntasks={mpi_omp_config['num_ranks']}\n"
+        content += f"#SBATCH --cpus-per-task={mpi_omp_config['threads_per_rank']}\n"
+        content += "export OMP_DISPLAY_ENV=TRUE\n"
+        content += f"export OMP_NUM_THREADS={mpi_omp_config['threads_per_rank']}\n"
+        content += f"#SBATCH --mem-per-cpu={int(mpi_omp_config['total_memory']/(mpi_omp_config['num_ranks'] * mpi_omp_config['threads_per_rank']))}\n\n"
+
     else:
         content += "#SBATCH --nodes=1\n"
         content += "#SBATCH --ntasks=1\n"
@@ -264,7 +294,7 @@ def run_euler(kernel, interface, p, filename, out_dir_run):
     )
 
     content += f"for i in {{1..{args.num_runs}}}; do\n"
-    if interface == "mpi":
+    if interface == "mpi" or interface == "mpi+omp":
         content += "srun "
 
     content += (
@@ -335,8 +365,11 @@ def run(datasets, on_euler):
             for interface in args.interfaces:
                 if args.verbose:
                     print(interface)
-                for p in num_processes:
-                    if interface == "std" and p != 1:
+                for i, p in enumerate(num_processes):
+                    # Only run single mpi + omp run, even if multiple # processors are specified -- really ugly hacky hack that will be fixed soon
+                    if (i != 0 and interface == "mpi+omp") or (
+                        interface == "std" and p != 1
+                    ):
                         continue
 
                     out_dir_run = os.path.join(
