@@ -19,7 +19,8 @@ inputsizes = {
 
 
 # Number of processes to test, always include 1 if you want to test the serial version
-num_processes = [2, 4, 8]  # MAX 48
+# num_processes = [1, 2, 4, 8, 12, 16, 20, 24, 28, 32]  # MAX 48
+num_processes = [1, 2, 4, 8]  # MAX 48
 
 
 interfaces = {"std": "", "omp": "_omp", "mpi": "_mpi", "blas": "_blas"}
@@ -336,8 +337,11 @@ def run(datasets, on_euler):
                 if args.verbose:
                     print(interface)
                 for p in num_processes:
-                    if interface == "std" and p != 1:
-                        continue
+                    if interface == "std":
+                        if p != 1:
+                            continue
+                    elif (interface == "omp" or interface == "mpi") and p == 1:  # anything other but p = 1
+                        continue 
 
                     out_dir_run = os.path.join(
                         output_dir, f"{filename}_np_{p}_{interface}"
@@ -346,6 +350,8 @@ def run(datasets, on_euler):
                     os.makedirs(out_dir_run, exist_ok=True)
 
                     if interface == "omp":
+                        if p == 1:
+                            continue
                         with open(
                             os.path.join(output_dir, "omp.json"),
                             "w",
@@ -353,6 +359,8 @@ def run(datasets, on_euler):
                             json.dump(omp_config, f, indent=4)
 
                     if interface == "mpi":
+                        if p == 1:
+                            continue
                         with open(
                             os.path.join(output_dir, "mpi.json"),
                             "w",
