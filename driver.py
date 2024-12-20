@@ -47,7 +47,7 @@ omp_config = {
 mpi_config = {
     "num_processes": num_processes,  # Guest users can only use up to 48 processors
     "nodes": 2,
-    "total_memory": 15000,
+    "total_memory": 100000,
 }
 
 mpi_gather_config = {
@@ -60,7 +60,7 @@ mpi_omp_config = {
     "num_ranks": [process for (process, thread) in processes_threads],
     "threads_per_rank": [thread for (process, thread) in processes_threads],
     "nodes": 4,
-    "total_memory": 15000,
+    "total_memory": 100000,
 }
 
 mpi_omp_gather_config = {
@@ -109,8 +109,24 @@ parser.add_argument(
     default=None,
 )
 
-args = parser.parse_args()
+parser.add_argument(
+    "--nodes",
+    type=int,
+    help="Number of nodes in mpi_config",
+    default=None,
+)
 
+args = parser.parse_args()
+if args.nodes:
+    mpi_config["nodes"] = args.nodes
+    mpi_gather_config["nodes"] = args.nodes
+    mpi_omp_config["nodes"] = args.nodes
+    mpi_omp_gather_config["nodes"] = args.nodes
+    mpi_config["num_processes"] = [processes for processes in num_processes if processes >= args.nodes]
+    mpi_gather_config["num_processes"] = [processes for processes in num_processes if processes >= args.nodes]
+    mpi_omp_config["num_ranks"] = [process for (process, thread) in processes_threads if process >= args.nodes]
+    mpi_omp_gather_config["num_ranks"] = [process for (process, thread) in processes_threads if process >= args.nodes]
+ 
 if args.size:
     inputsizes["gemver"] = [{"N": args.size}]
 
@@ -273,17 +289,13 @@ def run_euler(kernel, interface, p, filename, out_dir_run, t=0):
     content += f"#SBATCH --nodelist={','.join(nodelist)}\n"
 
 
-    if interface=="mpi" or interface=="mpi_gather" or t == 1: 
+    if interface=="mpi" or interface=="mpi_gather": 
         content += f"#SBATCH --nodes={mpi_config['nodes']}\n"
         content += f"#SBATCH --ntasks={p}\n"
         if interface == "mpi":
             content += f"#SBATCH --mem-per-cpu={int(mpi_config['total_memory']/p)}\n\n"
         if interface == "mpi_gather":
             content += f"#SBATCH --mem-per-cpu={int(mpi_gather_config['total_memory']/p)}\n\n"
-        if interface == "mpi+omp":
-            content += f"#SBATCH --mem-per-cpu={int(mpi_omp_config['total_memory']/p)}\n\n"
-        if interface == "mpi+omp_gather":
-            content += f"#SBATCH --mem-per-cpu={int(mpi_omp_gather_config['total_memory']/p)}\n\n"
         # content += "#SBATCH -C ib\n\n"
 
     elif interface == "omp" or interface == "blas":
@@ -301,12 +313,12 @@ def run_euler(kernel, interface, p, filename, out_dir_run, t=0):
         content += f"#SBATCH --nodes={mpi_omp_config['nodes']}\n"
         content += f"#SBATCH --ntasks={p}\n"
         content += f"#SBATCH --cpus-per-task={t}\n"
-        content += "export OMP_DISPLAY_ENV=TRUE\n"
-        content += f"export OMP_NUM_THREADS={t}\n"
         if interface == "mpi+omp":
             content += f"#SBATCH --mem-per-cpu={int(mpi_omp_config['total_memory']/(p*t))}\n\n"
         else:
             content += f"#SBATCH --mem-per-cpu={int(mpi_omp_gather_config['total_memory']/(p*t))}\n\n"
+        content += "export OMP_DISPLAY_ENV=TRUE\n"
+        content += f"export OMP_NUM_THREADS={t}\n"
 
     else:
         content += "#SBATCH --nodes=1\n"
@@ -393,19 +405,30 @@ def run(datasets, on_euler):
                     for i, pair in enumerate(processes_threads):
                         p = pair[0]
                         t = pair[1]
+                        if args.nodes and p < args.nodes:
+                            continue
                         out_dir_run = os.path.join(
                             output_dir, f"{filename}_np_{p*t}_{interface}"
                         )
+                        if args.nodes:
+                            out_dir_run += f"_nodes_{args.nodes}"
+                        
                         os.makedirs(out_dir_run, exist_ok=True)
                         if interface == "mpi+omp":
+                            json_file = "mpi_omp.json"
+                            if args.nodes:
+                                json_file = f"mpi_omp_{args.nodes}.json"
                             with open(
-                                os.path.join(output_dir, "mpi_omp.json"),
+                                os.path.join(output_dir, json_file),
                                 "w",
                             ) as f:
                                 json.dump(mpi_omp_config, f, indent=4)
                         if interface == "mpi+omp_gather":
+                            json_file = "mpi_omp_gather.json"
+                            if args.nodes:
+                                json_file = f"mpi_omp_gather_{args.nodes}.json"
                             with open(
-                                os.path.join(output_dir, "mpi_omp_gather.json"),
+                                os.path.join(output_dir, json_file),
                                 "w",
                             ) as f:
                                 json.dump(mpi_omp_gather_config, f, indent=4)
@@ -433,10 +456,14 @@ def run(datasets, on_euler):
                     # Only run single mpi + omp run, even if multiple # processors are specified -- really ugly hacky hack that will be fixed soon
                     if (interface == "std" and p != 1):
                         continue
+                    if args.nodes and interface.startswith("mpi") and p < args.nodes:
+                        continue
 
                     out_dir_run = os.path.join(
                         output_dir, f"{filename}_np_{p}_{interface}"
                     )
+                    if interface.startswith("mpi") and args.nodes:
+                        out_dir_run += f"_nodes_{args.nodes}"
 
                     os.makedirs(out_dir_run, exist_ok=True)
 
@@ -448,14 +475,20 @@ def run(datasets, on_euler):
                             json.dump(omp_config, f, indent=4)
 
                     if interface == "mpi":
+                        json_file = "mpi.json"
+                        if args.nodes:
+                            json_file = f"mpi_{args.nodes}.json"
                         with open(
-                            os.path.join(output_dir, "mpi.json"),
+                            os.path.join(output_dir, json_file),
                             "w",
                         ) as f:
                             json.dump(mpi_config, f, indent=4)
                     if interface == "mpi_gather":
+                        json_file = "mpi_gather.json"
+                        if args.nodes:
+                            json_file = f"mpi_gather_{args.nodes}.json"
                         with open(
-                            os.path.join(output_dir, "mpi_gather.json"),
+                            os.path.join(output_dir, json_file),
                             "w",
                         ) as f:
                             json.dump(mpi_gather_config, f, indent=4)

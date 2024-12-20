@@ -53,13 +53,14 @@ dirs = [
 ]
 
 for dir in dirs:
-    match = re.match(r"^(?P<kernel>[A-Za-z0-9-]+)_N_(?P<size>\d+)_np_(?P<processes>\d+)_(?P<type>\w+)$", dir)
+    match = re.match(r"^(?P<kernel>[A-Za-z0-9-]+)_N_(?P<size>\d+)_np_(?P<processes>\d+)_(?P<type>[\w+]+)$", dir)
     if not match:
         continue
 
     kernel = match.group("kernel")
     size = int(match.group("size"))
     num_processes = int(match.group("processes"))
+    num_processes_original = num_processes
     run_type = match.group("type")
 
     out_dir = os.path.join(output_dir, dir)
@@ -68,10 +69,17 @@ for dir in dirs:
     for file in out_files:
         with open(os.path.join(out_dir, file), "r") as f:
             lines = f.readlines()
-
+        if run_type == "mpi+omp" or run_type == "mpi+omp_gather":   
+            num_processes = 0
+        flag = False
         valid_lines = []
         for line in lines:
             match = time_pattern.search(line)
+            if run_type == "mpi+omp" or run_type == "mpi+omp_gather":
+                if "=" in line:
+                    flag = True
+                elif not flag:
+                    num_processes += 1
             if match:
                 try:
                     runtime = float(match.group(1))
@@ -100,7 +108,7 @@ for dir in dirs:
             rows.append({
                 "Kernel": kernel,
                 "Size": size,
-                "Processes": num_processes,
+                "Processes": num_processes_original,
                 "Type": run_type,
                 "Mean Runtime": mean_runtime,
                 "STD": variability

@@ -70,7 +70,11 @@ def main():
             exit(1)
 
     # Calculate speedup and efficiency
-    reference_runtime = df[(df['Processes'] == 1) & (df['Type'] == 'std')]['Mean Runtime'].iloc[0]
+    reference_runtime = df[(df['Processes'] == 1) & (df['Type'] == 'mpi_gather')]
+    if not reference_runtime.empty:
+        reference_runtime = reference_runtime['Mean Runtime'].iloc[0]
+    else:
+        reference_runtime = 31.412742499999997  # hardcoded for gemver 
     df['Speedup'] = reference_runtime / df['Mean Runtime']
     df['Efficiency'] = df['Speedup'] / df['Processes']
 
