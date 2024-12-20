@@ -113,7 +113,7 @@ for dir in dirs:
                 "Mean Runtime": mean_runtime,
                 "STD": variability
             })
-        elif run_type == "omp":
+        elif run_type.startswith("omp"):
             if valid_lines:
                 mean_runtime = np.mean(valid_lines)
                 variability = np.std(valid_lines)
