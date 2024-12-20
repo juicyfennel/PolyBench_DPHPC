@@ -47,7 +47,7 @@ omp_config = {
 mpi_config = {
     "num_processes": num_processes,  # Guest users can only use up to 48 processors
     "nodes": 2,
-    "total_memory": 100000,
+    "total_memory": 15000,
 }
 
 mpi_gather_config = {
@@ -59,14 +59,14 @@ mpi_gather_config = {
 mpi_omp_config = {
     "num_ranks": [process for (process, thread) in processes_threads],
     "threads_per_rank": [thread for (process, thread) in processes_threads],
-    "nodes": 4,
-    "total_memory": 100000,
+    "nodes": 8,
+    "total_memory": 15000,
 }
 
 mpi_omp_gather_config = {
     "num_ranks": [process for (process, thread) in processes_threads],
     "threads_per_rank": [thread for (process, thread) in processes_threads],
-    "nodes": 2,
+    "nodes": 8,
     "total_memory": 100000,
 }
 
@@ -85,7 +85,7 @@ parser.add_argument(
     type=str,
     nargs="+",
     help="Interfaces to run (default = all) (selection: 'std', 'omp', 'mpi')",
-    default=["std", "omp", "mpi","mpi+omp", "mpi+omp_gather"],
+    default=["std", "omp", "mpi", "mpi_gather","mpi+omp", "mpi+omp_gather"],
 )
 
 parser.add_argument(
@@ -405,8 +405,6 @@ def run(datasets, on_euler):
                     for i, pair in enumerate(processes_threads):
                         p = pair[0]
                         t = pair[1]
-                        if args.nodes and p < args.nodes:
-                            continue
                         out_dir_run = os.path.join(
                             output_dir, f"{filename}_np_{p*t}_{interface}"
                         )
@@ -456,9 +454,8 @@ def run(datasets, on_euler):
                     # Only run single mpi + omp run, even if multiple # processors are specified -- really ugly hacky hack that will be fixed soon
                     if (interface == "std" and p != 1):
                         continue
-                    if args.nodes and interface.startswith("mpi") and p < args.nodes:
+                    if ( (interface == "omp" or interface.startswith("mpi"))and p == 1):
                         continue
-
                     out_dir_run = os.path.join(
                         output_dir, f"{filename}_np_{p}_{interface}"
                     )
