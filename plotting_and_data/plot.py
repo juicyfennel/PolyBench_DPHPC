@@ -21,6 +21,7 @@ def plot_metrics(df, size, output_dir):
     plt.title(f'Runtime vs {x_label} (Size {size})')
     plt.legend()
     plt.grid()
+    plt.yscale('log')
     plt.savefig(f"{output_dir}/runtime_vs_processes.png")
     plt.close()
 
