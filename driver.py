@@ -26,6 +26,7 @@ processes_threads = [(2,1), (2,2), (4,2), (4,3), (4,4), (6,4), (8,4)] #20 24 28 
 
 interfaces = {
     "std": "",
+    "std_blocked" : "_first_touch",
     "omp": "_omp",
     "omp_blocked" : "_omp_opt_first_touch",
     "mpi": "_mpi",
@@ -336,10 +337,11 @@ def run_euler(kernel, interface, p, filename, out_dir_run, t=0):
         content += "srun "
 
     content += (
-        "perf stat -e task-clock,context-switches,cpu-migrations,page-faults,cycles,instructions,branches,branch-misses,stalled-cycles-frontend,stalled-cycles-backend,cache-references,cache-misses "
+        "perf stat -e task-clock,context-switches,cpu-migrations,page-faults,cycles,instructions,branches,branch-misses,stalled-cycles-frontend,stalled-cycles-backend,cache-references,L1-dcache-load-misses,cache-misses "
         + binary_path
         + "\n"
     )
+
     content += 'echo "==============="\n'  # stdout
     content += 'echo "===============" >&2\n'  # stderr
     content += "done\n\n"
@@ -454,7 +456,7 @@ def run(datasets, on_euler):
 
                 for i, p in enumerate(num_processes):
                     # Only run single mpi + omp run, even if multiple # processors are specified -- really ugly hacky hack that will be fixed soon
-                    if (interface == "std" and p != 1):
+                    if (interface.startswith("std") and p != 1):
                         continue
                     if ( (interface == "omp" or interface == "omp_blocked" or interface.startswith("mpi"))and p == 1):
                         continue
