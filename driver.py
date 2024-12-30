@@ -27,6 +27,7 @@ processes_threads = [(2,1), (2,2), (4,2), (4,3), (4,4), (6,4), (8,4)] #20 24 28 
 interfaces = {
     "std": "",
     "omp": "_omp",
+    "omp_blocked" : "_omp_opt_first_touch",
     "mpi": "_mpi",
     "blas": "_blas", "mpi_gather": "_mpi_plus_gather",
     "mpi+omp": "_mpi+omp",
@@ -178,6 +179,7 @@ def compile(datasets):
                 content += (
                     " -fopenmp "
                     if interface == "omp"
+                    or interface == "omp_blocked"
                     or interface == "blas"
                     or interface == "mpi+omp"
                     or interface == "mpi+omp_gather"
@@ -231,7 +233,7 @@ def run_local(kernel, interface, p, filename, out_dir_run):
         cmd = [os.path.join(".", "bin", f"{filename}{interfaces[interface]}")]
         if interface.startswith("mpi"):
             cmd = ["mpiexec", "-np", str(p)] + cmd
-        elif interface == "omp":
+        elif interface == "omp" or interface == "omp_blocked":
             os.environ["OMP_NUM_THREADS"] = str(p)
 
         with (
@@ -298,7 +300,7 @@ def run_euler(kernel, interface, p, filename, out_dir_run, t=0):
             content += f"#SBATCH --mem-per-cpu={int(mpi_gather_config['total_memory']/p)}\n\n"
         # content += "#SBATCH -C ib\n\n"
 
-    elif interface == "omp" or interface == "blas":
+    elif interface == "omp" or interface == "blas" or interface == "omp_blocked":
         content += "#SBATCH --nodes=1\n"
         content += "#SBATCH --ntasks=1\n"
         content += f"#SBATCH --cpus-per-task={p}\n"
@@ -454,7 +456,7 @@ def run(datasets, on_euler):
                     # Only run single mpi + omp run, even if multiple # processors are specified -- really ugly hacky hack that will be fixed soon
                     if (interface == "std" and p != 1):
                         continue
-                    if ( (interface == "omp" or interface.startswith("mpi"))and p == 1):
+                    if ( (interface == "omp" or interface == "omp_blocked" or interface.startswith("mpi"))and p == 1):
                         continue
                     out_dir_run = os.path.join(
                         output_dir, f"{filename}_np_{p}_{interface}"
@@ -464,7 +466,7 @@ def run(datasets, on_euler):
 
                     os.makedirs(out_dir_run, exist_ok=True)
 
-                    if interface == "omp":
+                    if interface == "omp" or interface == "omp_blocked":
                         with open(
                             os.path.join(output_dir, "omp.json"),
                             "w",
