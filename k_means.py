@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 
 def get_fast_group(times, plot_dir="mainplots/clusters", plot_name="cluster_plot.png"):
     """
-    Perform clustering on execution times to separate fast and slow groups.
+    Perform clustering on execution times to separate them into 4 groups and return the fastest group.
 
     Parameters:
         times (list or np.array): A list of execution times.
@@ -13,40 +13,23 @@ def get_fast_group(times, plot_dir="mainplots/clusters", plot_name="cluster_plot
         plot_name (str): Name of the plot file.
 
     Returns:
-        list: The fast group of execution times.
+        list: The fastest group of execution times.
     """
     # Convert times to a numpy array
     times = np.array(times).reshape(-1, 1)
 
-    # Apply K-means clustering with 2 clusters
-    kmeans = KMeans(n_clusters=2, random_state=0)
+    # Apply K-means clustering with 4 clusters
+    kmeans = KMeans(n_clusters=4, random_state=0)
     labels = kmeans.fit_predict(times)
 
-    # Separate times into "fast" and "slow" clusters
-    fast_cluster = times[labels == 0].flatten()
-    slow_cluster = times[labels == 1].flatten()
+    # Separate times into clusters
+    clusters = [times[labels == i].flatten() for i in range(4)]
 
-    # Determine which cluster is "fast" and which is "slow"
-    if np.mean(fast_cluster) > np.mean(slow_cluster):
-        fast_cluster, slow_cluster = slow_cluster, fast_cluster
+    # Find the fastest cluster (cluster with the lowest mean time)
+    fastest_cluster_index = np.argmin([np.mean(cluster) for cluster in clusters])
+    fastest_cluster = clusters[fastest_cluster_index]
 
-    # Plot the clusters
-    os.makedirs(plot_dir, exist_ok=True)
-    plt.figure(figsize=(10, 6))
-    plt.hist(fast_cluster, bins=15, alpha=0.7, label="Fast Cluster", color="blue")
-    plt.hist(slow_cluster, bins=15, alpha=0.7, label="Slow Cluster", color="orange")
-    plt.axvline(np.mean(fast_cluster), color="blue", linestyle="dashed", linewidth=1, label="Fast Mean")
-    plt.axvline(np.mean(slow_cluster), color="orange", linestyle="dashed", linewidth=1, label="Slow Mean")
-    plt.xlabel("Execution Time")
-    plt.ylabel("Frequency")
-    plt.title("Clustering of Execution Times")
-    plt.legend()
-    plt.tight_layout()
-
-
-    plt.close()
-    # Return the fast group as a list
-    return list(fast_cluster)
+    return list(fastest_cluster)
 
 # Example usage
 if __name__ == "__main__":
@@ -57,5 +40,5 @@ if __name__ == "__main__":
     ]
 
     # Call the function
-    fast_group = get_fast_group(sample_times, plot_name="example_plot.png")
-    print("Fast Group:", fast_group)
+    fastest_group = get_fast_group(sample_times, plot_name="example_plot.png")
+    print("Fastest Group:", fastest_group)
