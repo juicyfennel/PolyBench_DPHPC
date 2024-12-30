@@ -44,3 +44,5 @@ runtime_analysis/*
 myRuns/*
 
 plotting_and_data/*
+
+main_plot/*
