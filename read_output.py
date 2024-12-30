@@ -4,6 +4,7 @@ import re
 import pandas as pd
 import numpy as np
 from datetime import datetime
+from k_means import get_fast_group
 
 # Argument parser
 parser = argparse.ArgumentParser(description="Process runtime outputs into CSV files")
@@ -103,6 +104,7 @@ for dir in dirs:
                 if len(run) == num_processes:
                     max_runtime = max(run)
                     max_runtimes.append(max_runtime)
+            max_runtimes = get_fast_group(max_runtimes)
             mean_runtime = np.mean(max_runtimes)
             variability = np.std(max_runtimes)
             rows.append({
@@ -115,6 +117,7 @@ for dir in dirs:
             })
         elif run_type == "omp":
             if valid_lines:
+                valid_lines = get_fast_group(valid_lines)
                 mean_runtime = np.mean(valid_lines)
                 variability = np.std(valid_lines)
                 rows.append({
@@ -127,6 +130,7 @@ for dir in dirs:
                 })
         elif run_type == "std":
             if valid_lines:
+                valid_lines = get_fast_group(valid_lines)
                 mean_runtime = np.mean(valid_lines)
                 variability = np.std(valid_lines)
                 rows.append({
