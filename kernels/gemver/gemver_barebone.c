@@ -151,7 +151,7 @@ int main(int argc, char** argv) {
     
     init_data(&alpha, &beta, u1, u2, v1, v2, y, z, x, w, A);
     
-    printf("N: %d\n", N);
+    // printf("N: %d\n", N);
     // printf("%f", IDX_1D(x, 9));
     
     flush_cache();

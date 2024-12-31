@@ -10,8 +10,6 @@
 #define N 25000
 #endif
 
-#define ITERATIONS 10
-
 // Data type
 #define DATA_TYPE double
 #define MPI_DATA_TYPE MPI_DOUBLE
@@ -178,30 +176,23 @@ int main(int argc, char** argv) {
     MALLOC_1D(w, DATA_TYPE, num_rows);
     MALLOC_2D(A, DATA_TYPE, num_rows, N);
     
-    
+    /* Initialize array(s). */
+    // Step 2: Initialize the local arrays
+    init_data(&alpha, &beta, u1, u2, v1, v2, y, z, x, w, A,start_row,num_rows);
     
     // printf("N: %d\n", N);
     // printf("%f", IDX_1D(x, 9));
     
-    //compute total time
-    double total_time = 0.0;
+    flush_cache();
+
+    struct timespec start, end; 
+    clock_gettime(CLOCK_MONOTONIC_RAW, &start);
     
-    for (int i = 0; i < ITERATIONS; i++) {
-        /* Initialize array(s). */
-        // Step 2: Initialize the local arrays
-        init_data(&alpha, &beta, u1, u2, v1, v2, y, z, x, w, A,start_row,num_rows);
-        flush_cache();
+    kernel_gemver(alpha, beta, u1, u2, v1, v2, y, z, x, w, A,start_row,num_rows); 
 
-        struct timespec start, end; 
-        clock_gettime(CLOCK_MONOTONIC_RAW, &start);
-        
-        kernel_gemver(alpha, beta, u1, u2, v1, v2, y, z, x, w, A,start_row,num_rows); 
+    clock_gettime(CLOCK_MONOTONIC_RAW, &end);
 
-        clock_gettime(CLOCK_MONOTONIC_RAW, &end);
-        total_time += (end.tv_sec - start.tv_sec) + 1e-9 * (end.tv_nsec - start.tv_nsec);
-    }
-
-    printf("Rank %d, Time: %f\n", rank, total_time);
+    printf("Rank %d, Time: %f\n", rank,(end.tv_sec - start.tv_sec) + 1e-9 * (end.tv_nsec - start.tv_nsec));
 
     // check that A is computed correctly
 //    printf("Rows %d - %d, Gathered A:\n", start_row, start_row + num_rows-1);

@@ -104,7 +104,7 @@ for dir in dirs:
                 if len(run) == num_processes:
                     max_runtime = max(run)
                     max_runtimes.append(max_runtime)
-            max_runtimes = get_fast_group(max_runtimes)
+            # max_runtimes = get_fast_group(max_runtimes)
             mean_runtime = np.mean(max_runtimes)
             variability = np.std(max_runtimes)
             rows.append({
@@ -113,11 +113,12 @@ for dir in dirs:
                 "Processes": num_processes_original,
                 "Type": run_type,
                 "Mean Runtime": mean_runtime,
-                "STD": variability
+                "STD": variability,
+                "num-runs": len(max_runtimes)
             })
         elif run_type == "omp":
             if valid_lines:
-                valid_lines = get_fast_group(valid_lines)
+                # valid_lines = get_fast_group(valid_lines)
                 mean_runtime = np.mean(valid_lines)
                 variability = np.std(valid_lines)
                 rows.append({
@@ -126,11 +127,12 @@ for dir in dirs:
                     "Processes": num_processes,
                     "Type": run_type,
                     "Mean Runtime": mean_runtime,
-                    "STD": variability
+                    "STD": variability,
+                    "num-runs": len(valid_lines)
                 })
         elif run_type == "std":
             if valid_lines:
-                valid_lines = get_fast_group(valid_lines)
+                # valid_lines = get_fast_group(valid_lines)
                 mean_runtime = np.mean(valid_lines)
                 variability = np.std(valid_lines)
                 rows.append({
@@ -139,7 +141,8 @@ for dir in dirs:
                     "Processes": 1,
                     "Type": run_type,
                     "Mean Runtime": mean_runtime,
-                    "STD": variability  
+                    "STD": variability,
+                    "num-runs": len(valid_lines)  
                 })
 
 # Create a DataFrame
