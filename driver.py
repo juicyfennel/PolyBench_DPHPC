@@ -21,8 +21,10 @@ inputsizes = {
 
 # Number of processes to test, always include 1 if you want to test the serial version
 num_processes = [1, 2, 4, 8, 12, 16, 24, 32]  # MAX 48
+num_processes = [1,16]
 # num_processes = [1, 2, 4, 8]  # MAX 48
 processes_threads = [(2,1), (2,2), (4,2), (4,3), (4,4), (6,4), (8,4)] #20 24 28  32
+processes_threads = [(4,4)]
 
 interfaces = {
     "std": "",
