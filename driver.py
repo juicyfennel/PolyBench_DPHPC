@@ -15,14 +15,16 @@ kernels = {
 
 inputsizes = {
     "jacobi-2d": [{"TSTEPS": 500, "N": 3362}],
-    "gemver": [{"N": 20000}],
+    "gemver": [{"N":40000}],
 }
 
 
 # Number of processes to test, always include 1 if you want to test the serial version
-num_processes = [1, 2, 4, 8, 12, 16, 24, 32]  # MAX 48
+num_processes = [2, 4, 8, 12, 16, 24, 32]  # MAX 48
+# num_processes = [1,24]
 # num_processes = [1, 2, 4, 8]  # MAX 48
 processes_threads = [(2,1), (2,2), (4,2), (4,3), (4,4), (6,4), (8,4)] #20 24 28  32
+# processes_threads = [(6,4)]
 
 interfaces = {
     "std": "",
@@ -41,7 +43,7 @@ interfaces = {
 # Array A = N * N * 8 = 40000 * 40000 * 8 / (1024 * 1024) = 12200 MB
 omp_config = {
     "num_threads": num_processes,
-    "total_memory": 15000,  # Memory is shared among threads. Guest users can use up to 128GB of data.
+    "total_memory": 125000,  # Memory is shared among threads. Guest users can use up to 128GB of data.
     "places": "cores",  # OMP_PLACES: cores (no hyperthreading) | threads (logical threads) | sockets | numa_domains
     "proc_bind": "close",  # spread (spread out around threads/cores/sockets/NUMA domains) | close (as much as possible close to thread/core/same NUMA domains)
 }
@@ -49,27 +51,27 @@ omp_config = {
 mpi_config = {
     "num_processes": num_processes,  # Guest users can only use up to 48 processors
     "nodes": 2,
-    "total_memory": 15000,
+    "total_memory": 125000,
 }
 
 mpi_gather_config = {
     "num_processes": num_processes,  # Guest users can only use up to 48 processors
     "nodes": 2,
-    "total_memory": 100000,
+    "total_memory": 125000,
 }
 
 mpi_omp_config = {
     "num_ranks": [process for (process, thread) in processes_threads],
     "threads_per_rank": [thread for (process, thread) in processes_threads],
     "nodes": 8,
-    "total_memory": 15000,
+    "total_memory": 125000,
 }
 
 mpi_omp_gather_config = {
     "num_ranks": [process for (process, thread) in processes_threads],
     "threads_per_rank": [thread for (process, thread) in processes_threads],
     "nodes": 8,
-    "total_memory": 100000,
+    "total_memory": 125000,
 }
 
 
@@ -87,7 +89,7 @@ parser.add_argument(
     type=str,
     nargs="+",
     help="Interfaces to run (default = all) (selection: 'std', 'omp', 'mpi')",
-    default=["std", "omp", "mpi", "mpi_gather","mpi+omp", "mpi+omp_gather"],
+    default=["omp", "mpi","mpi+omp", "omp_blocked"],
 )
 
 parser.add_argument(
@@ -117,6 +119,11 @@ parser.add_argument(
     help="Number of nodes in mpi_config",
     default=None,
 )
+parser.add_argument(
+    "--idxProcesses",
+    type=int,
+    help="Index of processes_threads",
+)
 
 args = parser.parse_args()
 if args.nodes:
@@ -131,7 +138,8 @@ if args.nodes:
  
 if args.size:
     inputsizes["gemver"] = [{"N": args.size}]
-
+num_processes = [num_processes[args.idxProcesses]] 
+processes_threads = [processes_threads[args.idxProcesses]]
 
 # # compile
 def compile(datasets):

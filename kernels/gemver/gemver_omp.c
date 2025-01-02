@@ -11,8 +11,6 @@
 #define N 25000
 #endif
 
-#define ITERATIONS 10
-
 // Data type
 #define DATA_TYPE double
 
@@ -100,37 +98,41 @@ void kernel_gemver(DATA_TYPE alpha,
     DATA_TYPE *A) {
     int i, j; 
     
-    #pragma omp parallel for
-    for (i = 0; i < N; i++)
-        for (j = 0; j < N; j++)
-        //A[i * N + j] = A[i * N + j] + u1[i] * v1[j] + u2[i] * v2[j];
-        IDX_2D(A, i, j, N) = IDX_2D(A, i, j, N) + u1[i] * v1[j] + u2[i] * v2[j];
-    
-  //   printf("Gathered A_hat:\n");
-  //   for (int i = 0; i < N; i++) {
-  //       for (int j = 0; j < N; j++) {
-  //           printf("%f ", IDX_2D(A, i, j, N));
-  //     }
-  //     printf("\n");
-  //  }
-    #pragma omp parallel for
-    for (i = 0; i < N; i++)
-        for (j = 0; j < N; j++)
-            x[i] = x[i] + beta * IDX_2D(A, j, i, N)*y[j];
+    #pragma omp parallel
+    {
 
-    #pragma omp parallel for
-    for (i = 0; i < N; i++)
-        x[i] = x[i] + z[i];
+      #pragma omp for schedule(static, 64)
+      for (i = 0; i < N; i++)
+          for (j = 0; j < N; j++)
+          //A[i * N + j] = A[i * N + j] + u1[i] * v1[j] + u2[i] * v2[j];
+          IDX_2D(A, i, j, N) = IDX_2D(A, i, j, N) + u1[i] * v1[j] + u2[i] * v2[j];
+      
+    //   printf("Gathered A_hat:\n");
+    //   for (int i = 0; i < N; i++) {
+    //       for (int j = 0; j < N; j++) {
+    //           printf("%f ", IDX_2D(A, i, j, N));
+    //     }
+    //     printf("\n");
+    //  }
+      #pragma omp for schedule(static, 64)
+      for (i = 0; i < N; i++)
+          for (j = 0; j < N; j++)
+              x[i] = x[i] + beta * IDX_2D(A, j, i, N)*y[j];
 
-    // printf("Gathered x:\n");
-    // for (int i = 0; i < N; i++) {
-    //     printf("%f ", x[i]);
-    // }
-    // printf("\n");
-    #pragma omp parallel for
-    for (i = 0; i < N; i++)
-        for (j = 0; j < N; j++)
-        w[i] = w[i] +  alpha * IDX_2D(A, i, j, N) * x[j];
+      #pragma omp for schedule(static, 64)
+      for (i = 0; i < N; i++)
+          x[i] = x[i] + z[i];
+
+      // printf("Gathered x:\n");
+      // for (int i = 0; i < N; i++) {
+      //     printf("%f ", x[i]);
+      // }
+      // printf("\n");
+      #pragma omp for schedule(static, 64)
+      for (i = 0; i < N; i++)
+          for (j = 0; j < N; j++)
+          w[i] = w[i] +  alpha * IDX_2D(A, i, j, N) * x[j];
+    }
 
     // printf("Gathered w:\n");
     // for (int i = 0; i < N; i++) {
@@ -156,27 +158,19 @@ int main(int argc, char** argv) {
     
     init_data(&alpha, &beta, u1, u2, v1, v2, y, z, x, w, A);
     
-    printf("N: %d\n", N);
+    // printf("N: %d\n", N);
     // printf("%f", IDX_1D(x, 9));
     
-    //compute total time
-    double total_time = 0.0;
+    flush_cache();
 
-    for (int i = 0; i < ITERATIONS; i++) {
-        init_data(&alpha, &beta, u1, u2, v1, v2, y, z, x, w, A);
-        flush_cache();
+    struct timespec start, end; 
+    clock_gettime(CLOCK_MONOTONIC_RAW, &start);
+    
+    kernel_gemver(alpha, beta, u1, u2, v1, v2, y, z, x, w, A); 
 
+    clock_gettime(CLOCK_MONOTONIC_RAW, &end);
 
-        struct timespec start, end; 
-        clock_gettime(CLOCK_MONOTONIC_RAW, &start);
-        
-        kernel_gemver(alpha, beta, u1, u2, v1, v2, y, z, x, w, A); 
-
-        clock_gettime(CLOCK_MONOTONIC_RAW, &end);
-        total_time += (end.tv_sec - start.tv_sec) + 1e-9 * (end.tv_nsec - start.tv_nsec);
-    }
-
-    printf("Time: %f\n", total_time);
+    printf("Time: %f\n", (end.tv_sec - start.tv_sec) + 1e-9 * (end.tv_nsec - start.tv_nsec));
 
     // Don't forget to free allocated memory
     free(u1);
