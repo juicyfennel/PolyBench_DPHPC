@@ -14,7 +14,16 @@ parser.add_argument(
     help="Path to the specific directory containing benchmark outputs (e.g., ./outputs/2024_12_15__14-30-45). Defaults to the latest folder in ./outputs.",
 )
 
+parser.add_argument(
+    "--clusters",
+    type=int,
+    default=1,
+    help="Number of clusters to use for K-means clustering. Defaults to 1.",
+)
+
 args = parser.parse_args()
+
+clusters = args.clusters
 
 # Base directory
 output_base = "./outputs"
@@ -107,7 +116,9 @@ for dir in dirs:
                 if len(run) == num_processes:
                     max_runtime = max(run)
                     max_runtimes.append(max_runtime)
-            # max_runtimes = get_fast_group(max_runtimes,date,dir)
+            if len(max_runtimes) < clusters:
+                continue
+            max_runtimes = get_fast_group(max_runtimes,date,dir,clusters)
             mean_runtime = np.mean(max_runtimes)
             variability = np.std(max_runtimes)
             rows[size].append({
@@ -119,9 +130,9 @@ for dir in dirs:
                 "STD": variability,
                 "num-runs": len(max_runtimes)
             })
-        elif (run_type == "omp" or run_type == "omp_blocked"):
-            if valid_lines:
-                # valid_lines = get_fast_group(valid_lines,date,dir)
+        elif run_type in {"omp", "omp_blocked"}:
+            if valid_lines and len(valid_lines) >= clusters:
+                valid_lines = get_fast_group(valid_lines,date,dir,clusters)
                 mean_runtime = np.mean(valid_lines)
                 variability = np.std(valid_lines)
                 rows[size].append({
@@ -134,8 +145,8 @@ for dir in dirs:
                     "num-runs": len(valid_lines)
                 })
         elif (run_type == "std" or run_type == "std_blocked"):
-            if valid_lines:
-                # valid_lines = get_fast_group(valid_lines,date,dir)
+            if valid_lines and len(valid_lines) >= clusters:
+                valid_lines = get_fast_group(valid_lines,date,dir,clusters)
                 mean_runtime = np.mean(valid_lines)
                 variability = np.std(valid_lines)
                 rows[size].append({
@@ -155,13 +166,44 @@ for dir in dirs:
 analysis_dir = os.path.join("./runtime_analysis", os.path.basename(output_dir))
 os.makedirs(analysis_dir, exist_ok=True)
 
-# # Save a single CSV file for the processed data
-# output_file = os.path.join(analysis_dir, "runtime_analysis.csv")
-# df.to_csv(output_file, index=False)
-# print(f"Runtime analysis saved to {output_file}")
-
+# Save individual CSV files for each size
 for size in rows:
     output_file = os.path.join(analysis_dir, f"runtime_analysis_{size}.csv")
     df = pd.DataFrame(rows[size])
     df.to_csv(output_file, index=False)
     print(f"Runtime analysis for size {size} saved to {output_file}")
+
+# Combine all rows into a single DataFrame
+all_data = pd.concat([pd.DataFrame(rows[size]) for size in rows])
+
+# Define selection conditions for the final CSV files
+conditions_1 = [
+    (40000, 2), (45000, 4), (50000, 8), (55000, 12),
+    (60000, 16), (65000, 24), (70000, 32)
+]
+conditions_2 = [
+    (40000, 2), (42000, 4), (46000, 8), (50000, 12),
+    (54000, 16), (62000, 24), (70000, 32)
+]
+
+# Filter and save weak_scaling_data_1.csv
+weak_scaling_data_1 = all_data[
+    all_data.apply(
+        lambda x: (x["Size"], x["Processes"]) in conditions_1 and
+                  x["Type"] in {"omp", "omp_blocked", "mpi", "mpi+omp"},
+        axis=1
+    )
+]
+weak_scaling_data_1.to_csv(os.path.join(analysis_dir, "weak_scaling_data_1.csv"), index=False)
+print(f"Weak scaling data 1 saved to {os.path.join(analysis_dir, 'weak_scaling_data_1.csv')}")
+
+# Filter and save weak_scaling_data_2.csv
+weak_scaling_data_2 = all_data[
+    all_data.apply(
+        lambda x: (x["Size"], x["Processes"]) in conditions_2 and
+                  x["Type"] in {"omp", "omp_blocked", "mpi", "mpi+omp"},
+        axis=1
+    )
+]
+weak_scaling_data_2.to_csv(os.path.join(analysis_dir, "weak_scaling_data_2.csv"), index=False)
+print(f"Weak scaling data 2 saved to {os.path.join(analysis_dir, 'weak_scaling_data_2.csv')}")

@@ -89,7 +89,7 @@ def main():
     os.makedirs(output_dir, exist_ok=True)
 
     # Specify the desired legend order
-    legend_order = ["std", "omp", "mpi", "mpi+omp", "mpi_gather", "mpi+omp_gather"]
+    legend_order = ["std","std_blocked", "omp", "omp_blocked", "mpi", "mpi+omp", "mpi_gather", "mpi+omp_gather"]
 
     # Plot metrics
     plot_metrics(df, size, output_dir, legend_order)
