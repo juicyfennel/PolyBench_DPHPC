@@ -43,7 +43,7 @@ else:
 
 print(f"Processing directory: {output_dir}")
 
-rows = []
+rows = {}
 time_pattern = re.compile(r"Time:\s*([\d.]+)")
 
 # Process the provided or determined benchmark folder
@@ -52,6 +52,7 @@ dirs = [
     for f in os.listdir(output_dir)
     if os.path.isdir(os.path.join(output_dir, f))
 ]
+date = output_dir.split("/")[-1]
 
 for dir in dirs:
     match = re.match(r"^(?P<kernel>[A-Za-z0-9-]+)_N_(?P<size>\d+)_np_(?P<processes>\d+)_(?P<type>[\w+]+)$", dir)
@@ -60,6 +61,8 @@ for dir in dirs:
 
     kernel = match.group("kernel")
     size = int(match.group("size"))
+    if size not in rows:
+        rows[size] =[]
     num_processes = int(match.group("processes"))
     num_processes_original = num_processes
     run_type = match.group("type")
@@ -79,11 +82,11 @@ for dir in dirs:
             if run_type == "mpi+omp" or run_type == "mpi+omp_gather":
                 if "=" in line:
                     flag = True
-                elif not flag:
-                    num_processes += 1
             if match:
                 try:
                     runtime = float(match.group(1))
+                    if (run_type == "mpi+omp" or run_type == "mpi+omp_gather") and not flag:
+                        num_processes += 1
                     valid_lines.append(runtime)
                 except ValueError:
                     continue
@@ -104,10 +107,10 @@ for dir in dirs:
                 if len(run) == num_processes:
                     max_runtime = max(run)
                     max_runtimes.append(max_runtime)
-            # max_runtimes = get_fast_group(max_runtimes)
+            # max_runtimes = get_fast_group(max_runtimes,date,dir)
             mean_runtime = np.mean(max_runtimes)
             variability = np.std(max_runtimes)
-            rows.append({
+            rows[size].append({
                 "Kernel": kernel,
                 "Size": size,
                 "Processes": num_processes_original,
@@ -116,12 +119,12 @@ for dir in dirs:
                 "STD": variability,
                 "num-runs": len(max_runtimes)
             })
-        elif run_type == "omp":
+        elif (run_type == "omp" or run_type == "omp_blocked"):
             if valid_lines:
-                # valid_lines = get_fast_group(valid_lines)
+                # valid_lines = get_fast_group(valid_lines,date,dir)
                 mean_runtime = np.mean(valid_lines)
                 variability = np.std(valid_lines)
-                rows.append({
+                rows[size].append({
                     "Kernel": kernel,
                     "Size": size,
                     "Processes": num_processes,
@@ -130,12 +133,12 @@ for dir in dirs:
                     "STD": variability,
                     "num-runs": len(valid_lines)
                 })
-        elif run_type == "std":
+        elif (run_type == "std" or run_type == "std_blocked"):
             if valid_lines:
-                # valid_lines = get_fast_group(valid_lines)
+                # valid_lines = get_fast_group(valid_lines,date,dir)
                 mean_runtime = np.mean(valid_lines)
                 variability = np.std(valid_lines)
-                rows.append({
+                rows[size].append({
                     "Kernel": kernel,
                     "Size": size,
                     "Processes": 1,
@@ -146,13 +149,19 @@ for dir in dirs:
                 })
 
 # Create a DataFrame
-df = pd.DataFrame(rows)
+# df = pd.DataFrame(rows)
 
 # Create a new runtime_analysis directory with the same date_time as the source
 analysis_dir = os.path.join("./runtime_analysis", os.path.basename(output_dir))
 os.makedirs(analysis_dir, exist_ok=True)
 
-# Save a single CSV file for the processed data
-output_file = os.path.join(analysis_dir, "runtime_analysis.csv")
-df.to_csv(output_file, index=False)
-print(f"Runtime analysis saved to {output_file}")
+# # Save a single CSV file for the processed data
+# output_file = os.path.join(analysis_dir, "runtime_analysis.csv")
+# df.to_csv(output_file, index=False)
+# print(f"Runtime analysis saved to {output_file}")
+
+for size in rows:
+    output_file = os.path.join(analysis_dir, f"runtime_analysis_{size}.csv")
+    df = pd.DataFrame(rows[size])
+    df.to_csv(output_file, index=False)
+    print(f"Runtime analysis for size {size} saved to {output_file}")
