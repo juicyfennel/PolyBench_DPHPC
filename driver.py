@@ -29,8 +29,10 @@ processes_threads = [(2,1), (2,2), (4,2), (4,3), (4,4), (6,4), (8,4)] #20 24 28 
 interfaces = {
     "std": "",
     "std_blocked" : "_first_touch",
+    "std_fastest" : "_fastest",
     "omp": "_omp",
     "omp_blocked" : "_omp_opt_first_touch",
+    "omp_fastest" : "_omp_fastest",
     "mpi": "_mpi",
     "blas": "_blas", "mpi_gather": "_mpi_plus_gather",
     "mpi+omp": "_mpi+omp",
@@ -43,7 +45,7 @@ interfaces = {
 # Array A = N * N * 8 = 40000 * 40000 * 8 / (1024 * 1024) = 12200 MB
 omp_config = {
     "num_threads": num_processes,
-    "total_memory": 125000,  # Memory is shared among threads. Guest users can use up to 128GB of data.
+    "total_memory": 70000,  # Memory is shared among threads. Guest users can use up to 128GB of data.
     "places": "cores",  # OMP_PLACES: cores (no hyperthreading) | threads (logical threads) | sockets | numa_domains
     "proc_bind": "close",  # spread (spread out around threads/cores/sockets/NUMA domains) | close (as much as possible close to thread/core/same NUMA domains)
 }
@@ -51,7 +53,7 @@ omp_config = {
 mpi_config = {
     "num_processes": num_processes,  # Guest users can only use up to 48 processors
     "nodes": 2,
-    "total_memory": 125000,
+    "total_memory": 70000,
 }
 
 mpi_gather_config = {
@@ -64,7 +66,7 @@ mpi_omp_config = {
     "num_ranks": [process for (process, thread) in processes_threads],
     "threads_per_rank": [thread for (process, thread) in processes_threads],
     "nodes": 8,
-    "total_memory": 125000,
+    "total_memory": 70000,
 }
 
 mpi_omp_gather_config = {
@@ -120,9 +122,11 @@ parser.add_argument(
     default=None,
 )
 parser.add_argument(
-    "--idxProcesses",
+    "--processes",
     type=int,
-    help="Index of processes_threads",
+    nargs="+",
+    help="Number of processes/threads",
+    default=[2],
 )
 
 args = parser.parse_args()
@@ -138,8 +142,14 @@ if args.nodes:
  
 if args.size:
     inputsizes["gemver"] = [{"N": args.size}]
-num_processes = [num_processes[args.idxProcesses]] 
-processes_threads = [processes_threads[args.idxProcesses]]
+num_processes = [1]
+processes_threads_tmp = []
+for nbOfProcesses in args.processes:
+    num_processes.append(nbOfProcesses)
+    for nbOfProcesses_threads in processes_threads:
+        if nbOfProcesses_threads[0]*nbOfProcesses_threads[1] == nbOfProcesses:
+            processes_threads_tmp.append(nbOfProcesses_threads)
+processes_threads = processes_threads_tmp
 
 # # compile
 def compile(datasets):
@@ -189,6 +199,7 @@ def compile(datasets):
                     " -fopenmp "
                     if interface == "omp"
                     or interface == "omp_blocked"
+                    or interface == "omp_fastest"
                     or interface == "blas"
                     or interface == "mpi+omp"
                     or interface == "mpi+omp_gather"
@@ -309,7 +320,7 @@ def run_euler(kernel, interface, p, filename, out_dir_run, t=0):
             content += f"#SBATCH --mem-per-cpu={int(mpi_gather_config['total_memory']/p)}\n\n"
         # content += "#SBATCH -C ib\n\n"
 
-    elif interface == "omp" or interface == "blas" or interface == "omp_blocked":
+    elif interface == "omp" or interface == "blas" or interface == "omp_blocked" or interface == "omp_fastest":
         content += "#SBATCH --nodes=1\n"
         content += "#SBATCH --ntasks=1\n"
         content += f"#SBATCH --cpus-per-task={p}\n"
@@ -466,7 +477,7 @@ def run(datasets, on_euler):
                     # Only run single mpi + omp run, even if multiple # processors are specified -- really ugly hacky hack that will be fixed soon
                     if (interface.startswith("std") and p != 1):
                         continue
-                    if ( (interface == "omp" or interface == "omp_blocked" or interface.startswith("mpi"))and p == 1):
+                    if ( (interface == "omp" or interface == "omp_blocked" or interface == "omp_fastest" or interface.startswith("mpi"))and p == 1):
                         continue
                     out_dir_run = os.path.join(
                         output_dir, f"{filename}_np_{p}_{interface}"
@@ -476,7 +487,7 @@ def run(datasets, on_euler):
 
                     os.makedirs(out_dir_run, exist_ok=True)
 
-                    if interface == "omp" or interface == "omp_blocked":
+                    if interface == "omp" or interface == "omp_blocked" or interface == "omp_fastest":
                         with open(
                             os.path.join(output_dir, "omp.json"),
                             "w",
