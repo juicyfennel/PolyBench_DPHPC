@@ -98,8 +98,8 @@ void kernel_gemver(DATA_TYPE alpha,
     int i, j; 
 
 
-    struct timespec start; 
-    clock_gettime(CLOCK_MONOTONIC_RAW, &start);
+    // struct timespec start; 
+    // clock_gettime(CLOCK_MONOTONIC_RAW, &start);
 
 
     for (i = 0; i < N; i++)
@@ -107,8 +107,8 @@ void kernel_gemver(DATA_TYPE alpha,
         A[i * N + j] = A[i * N + j] + u1[i] * v1[j] + u2[i] * v2[j];
 
   
-    struct timespec loop1; 
-    clock_gettime(CLOCK_MONOTONIC_RAW, &loop1);
+    // struct timespec loop1; 
+    // clock_gettime(CLOCK_MONOTONIC_RAW, &loop1);
 
     int B = 8; // Block size
 
@@ -124,16 +124,16 @@ void kernel_gemver(DATA_TYPE alpha,
  
 
     
-    struct timespec loop2;
-    clock_gettime(CLOCK_MONOTONIC_RAW, &loop2);
+    // struct timespec loop2;
+    // clock_gettime(CLOCK_MONOTONIC_RAW, &loop2);
 
 
     for (i = 0; i < N; i++)
         x[i] = x[i] + z[i];
 
       
-    struct timespec loop3;
-    clock_gettime(CLOCK_MONOTONIC_RAW, &loop3);
+    // struct timespec loop3;
+    // clock_gettime(CLOCK_MONOTONIC_RAW, &loop3);
 
 
     for (i = 0; i < N; i++)
@@ -141,15 +141,15 @@ void kernel_gemver(DATA_TYPE alpha,
           w[i] = w[i] + alpha * A[i*N+j] * x[j];
 
 
-    struct timespec loop4;
-    clock_gettime(CLOCK_MONOTONIC_RAW, &loop4);
+    // struct timespec loop4;
+    // clock_gettime(CLOCK_MONOTONIC_RAW, &loop4);
 
 
-    printf("Loop 1 Time: %f\n", (loop1.tv_sec - start.tv_sec) + 1e-9 * (loop1.tv_nsec - start.tv_nsec));
-    printf("Loop 2 Time: %f\n", (loop2.tv_sec - loop1.tv_sec) + 1e-9 * (loop2.tv_nsec - loop1.tv_nsec));
-    printf("Loop 3 Time: %f\n", (loop3.tv_sec - loop2.tv_sec) + 1e-9 * (loop3.tv_nsec - loop2.tv_nsec));
-    printf("Loop 4 Time: %f\n", (loop4.tv_sec - loop3.tv_sec) + 1e-9 * (loop4.tv_nsec - loop3.tv_nsec));
-    printf("Total time: %f\n", (loop4.tv_sec - start.tv_sec) + 1e-9 * (loop4.tv_nsec - start.tv_nsec));
+    // printf("Loop 1 Time: %f\n", (loop1.tv_sec - start.tv_sec) + 1e-9 * (loop1.tv_nsec - start.tv_nsec));
+    // printf("Loop 2 Time: %f\n", (loop2.tv_sec - loop1.tv_sec) + 1e-9 * (loop2.tv_nsec - loop1.tv_nsec));
+    // printf("Loop 3 Time: %f\n", (loop3.tv_sec - loop2.tv_sec) + 1e-9 * (loop3.tv_nsec - loop2.tv_nsec));
+    // printf("Loop 4 Time: %f\n", (loop4.tv_sec - loop3.tv_sec) + 1e-9 * (loop4.tv_nsec - loop3.tv_nsec));
+    // printf("Total time: %f\n", (loop4.tv_sec - start.tv_sec) + 1e-9 * (loop4.tv_nsec - start.tv_nsec));
 
 
 
@@ -194,19 +194,21 @@ int main(int argc, char** argv) {
     MALLOC_1D(w, DATA_TYPE, N);
     MALLOC_2D(A, DATA_TYPE, N, N);
         
-    printf("N: %d\n", N);
+    // printf("N: %d\n", N);
     // printf("%f", IDX_1D(x, 9));
     
     // compute total time
-
-    flush_cache();
+    struct timespec start, end;
     init_data(&alpha, &beta, u1, u2, v1, v2, y, z, x, w, A);
+    flush_cache();
     
+    clock_gettime(CLOCK_MONOTONIC_RAW, &start);
     kernel_gemver(alpha, beta, u1, u2, v1, v2, y, z, x, w, A); 
+    clock_gettime(CLOCK_MONOTONIC_RAW, &end);
 
     // clock_gettime(CLOCK_MONOTONIC_RAW, &end);
 
-    // printf("Time: %f\n", (end.tv_sec - start.tv_sec) + 1e-9 * (end.tv_nsec - start.tv_nsec));
+    printf("Time: %f\n", (end.tv_sec - start.tv_sec) + 1e-9 * (end.tv_nsec - start.tv_nsec));
     // printf("Total 10 Run Time: %f\n", (end.tv_sec - start.tv_sec) + 1e-9 * (end.tv_nsec - start.tv_nsec));
 
 

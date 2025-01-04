@@ -94,7 +94,7 @@ parent_dirs = []
 
 patterns = ["2024_12_30_20","2024_12_31", "2025"]
 # patterns = ["2024_12_20__13-00-00","2024_12_20__08-29-26","2024_12_19__2","2024_12_19__15-13-27","2024_12_19__14-01-25","2024_12_19__13"]  # for 20k iterations 
-
+patterns = ["2025_01_04"]  
 # Collect directories matching the patterns
 for entry in os.listdir(base_dir):
     if any(entry.startswith(pattern) for pattern in patterns):
@@ -103,5 +103,5 @@ for entry in os.listdir(base_dir):
             parent_dirs.append(full_path)
 parent_dirs = list(set(parent_dirs))  # Remove duplicates
 parent_dirs.sort()  # Sort the list
-combined_dir = "myRuns/merged/2025_01_03__10-00-00--WeakScalingData_ALL"    # Name of the combined output directory
+combined_dir = "myRuns/merged/2025_01_04"    # Name of the combined output directory
 combine_out_files(parent_dirs, combined_dir)

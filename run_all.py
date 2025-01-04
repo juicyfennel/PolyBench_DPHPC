@@ -4,21 +4,33 @@ import subprocess
 # Define the sizes and number of runs
 # sizes = [40000,45000,50000,55000,60000,65000,70000] #2 -> 40000, 4 -> 42000, 8->46000, 12->50000, 16->54000, 24 -> 62000, 32 -> 70000
 # size = 65000
-sizes = [[40000,0],[45000,1],[50000,2],[55000,3],[60000,4],[65000,5],[70000,6],[42000,1],[46000,2],[50000,3],[54000,4],[62000,5]]
+# sizes = [[40000,0],[45000,1],[50000,2],[55000,3],[60000,4],[65000,5],[70000,6],[42000,1],[46000,2],[50000,3],[54000,4],[62000,5]]
 sizes = [
-    [40000,0,["omp_blocked"],100],
-    [42000,1,["mpi+omp"],100],
-    [45000,1,["omp_blocked"],200],
-    [46000,2,["mpi+omp","omp_blocked"],100],
-    [50000,2,["omp"],200],
-    [54000,4,["mpi+omp","omp_blocked"],100],
+    [20000,2,["omp_fastest"],200],
+    [28284,4,["omp_fastest"],200],
+    [40000,8,["omp_fastest"],200],
+    [56568,16,["omp_fastest"],200],
+    [80000,32,["omp_fastest"],200],
     ]
+# sizes = [
+#     [40000,2,["std","std_fastest"],10],
+
+# ]
+            
+# sizes = [
+#     [40000,0,["omp_blocked"],100],
+#     [42000,1,["mpi+omp"],100],
+#     [45000,1,["omp_blocked"],200],
+#     [46000,2,["mpi+omp","omp_blocked"],100],
+#     [50000,2,["omp"],200],
+#     [54000,4,["mpi+omp","omp_blocked"],100],
+#     ]
 num_runs = 1
 # interfaces = ["mpi", "mpi_gather", "mpi+omp", "mpi+omp_gather"]
-interfaces = ["omp", "omp_blocked", "mpi", "mpi+omp"]
+# interfaces = ["omp", "omp_blocked", "mpi", "mpi+omp"]
 # interfaces = ["omp"]
 # interfaces = ["std", "std_blocked"]
-Iterations = 50
+# Iterations = 50
 
 # Path to the driver script
 driver_script = "driver.py"
@@ -35,7 +47,7 @@ for size in sizes:
             str(num_runs),
             "--size",
             str(size[0]),
-            "--idxProcesses",
+            "--processes",
             str(size[1]),
             "--no-compile",
             "--interfaces",
