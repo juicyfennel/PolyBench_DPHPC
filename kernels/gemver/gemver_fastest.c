@@ -3,6 +3,7 @@
 #include <time.h> 
 #include <assert.h>
 
+
 // Problem size
 // #define N 30000
 #ifndef N 
@@ -43,7 +44,7 @@ void flush_cache()
   int cs = 32770 * 1024 * 2 / sizeof(double);
   double* flush = (double*) calloc (cs, sizeof(double));
   int i;
-  double tmp = 0.0;
+  volatile double tmp = 0.0;
   for (i = 0; i < cs; i++)
     tmp += flush[i];
   assert (tmp <= 10.0);
@@ -85,22 +86,78 @@ void init_data(
 
 void kernel_gemver(DATA_TYPE alpha,
     DATA_TYPE beta,
-    DATA_TYPE *u1,
-    DATA_TYPE *u2, 
-    DATA_TYPE *v1,
-    DATA_TYPE *v2, 
-    DATA_TYPE *y,
-    DATA_TYPE *z,
-    DATA_TYPE *x,
-    DATA_TYPE *w,
-    DATA_TYPE *A) {
+    DATA_TYPE *restrict u1,
+    DATA_TYPE *restrict u2,
+    DATA_TYPE *restrict v1,
+    DATA_TYPE *restrict v2,
+    DATA_TYPE *restrict y,
+    DATA_TYPE *restrict z,
+    DATA_TYPE *restrict x,
+    DATA_TYPE *restrict w,
+    DATA_TYPE *restrict A) {
     int i, j; 
+
+
+    // struct timespec start; 
+    // clock_gettime(CLOCK_MONOTONIC_RAW, &start);
+
 
     for (i = 0; i < N; i++)
         for (j = 0; j < N; j++)
-        //A[i * N + j] = A[i * N + j] + u1[i] * v1[j] + u2[i] * v2[j];
-        IDX_2D(A, i, j, N) = IDX_2D(A, i, j, N) + u1[i] * v1[j] + u2[i] * v2[j];
+        A[i * N + j] = A[i * N + j] + u1[i] * v1[j] + u2[i] * v2[j];
+
+  
+    // struct timespec loop1; 
+    // clock_gettime(CLOCK_MONOTONIC_RAW, &loop1);
+
+    int B = 8; // Block size
+
+    for (int ii = 0; ii < N; ii += B) {
+        for (int jj = 0; jj < N; jj += B) {
+            for (int i = ii; i < ii + B && i < N; i++) {
+                for (int j = jj; j < jj + B && j < N; j++) {
+                    x[i] = x[i] + beta * A[j*N+i] * y[j];
+                }
+            }
+        }
+    }
+ 
+
     
+    // struct timespec loop2;
+    // clock_gettime(CLOCK_MONOTONIC_RAW, &loop2);
+
+
+    for (i = 0; i < N; i++)
+        x[i] = x[i] + z[i];
+
+      
+    // struct timespec loop3;
+    // clock_gettime(CLOCK_MONOTONIC_RAW, &loop3);
+
+
+    for (i = 0; i < N; i++)
+        for (j = 0; j < N; j++)
+          w[i] = w[i] + alpha * A[i*N+j] * x[j];
+
+
+    // struct timespec loop4;
+    // clock_gettime(CLOCK_MONOTONIC_RAW, &loop4);
+
+
+    // printf("Loop 1 Time: %f\n", (loop1.tv_sec - start.tv_sec) + 1e-9 * (loop1.tv_nsec - start.tv_nsec));
+    // printf("Loop 2 Time: %f\n", (loop2.tv_sec - loop1.tv_sec) + 1e-9 * (loop2.tv_nsec - loop1.tv_nsec));
+    // printf("Loop 3 Time: %f\n", (loop3.tv_sec - loop2.tv_sec) + 1e-9 * (loop3.tv_nsec - loop2.tv_nsec));
+    // printf("Loop 4 Time: %f\n", (loop4.tv_sec - loop3.tv_sec) + 1e-9 * (loop4.tv_nsec - loop3.tv_nsec));
+    // printf("Total time: %f\n", (loop4.tv_sec - start.tv_sec) + 1e-9 * (loop4.tv_nsec - start.tv_nsec));
+
+
+
+
+    // for (int j = 0; j < 10; j++) {
+    //   printf("%f ", IDX_2D(A, 1, j, N));
+    // }
+
 //     printf("Gathered A_hat:\n");
 //     for (int i = 0; i < N; i++) {
 //         for (int j = 0; j < N; j++) {
@@ -109,29 +166,17 @@ void kernel_gemver(DATA_TYPE alpha,
 //       printf("\n");
 //    }
 
-    for (i = 0; i < N; i++)
-        for (j = 0; j < N; j++)
-            x[i] = x[i] + beta * IDX_2D(A, j, i, N)*y[j];
+//     printf("Gathered x:\n");
+//     for (int i = 0; i < N; i++) {
+//         printf("%f ", x[i]);
+//     }
+//     printf("\n");
 
-
-    for (i = 0; i < N; i++)
-        x[i] = x[i] + z[i];
-
-    // printf("Gathered x:\n");
-    // for (int i = 0; i < N; i++) {
-    //     printf("%f ", x[i]);
-    // }
-    // printf("\n");
-
-    for (i = 0; i < N; i++)
-        for (j = 0; j < N; j++)
-        w[i] = w[i] +  alpha * IDX_2D(A, i, j, N) * x[j];
-
-    // printf("Gathered w:\n");
-    // for (int i = 0; i < N; i++) {
-    //     printf("%f ", w[i]);
-    // }
-    // printf("\n");
+//     printf("Gathered w:\n");
+//     for (int i = 0; i < N; i++) {
+//         printf("%f ", w[i]);
+//     }
+//     printf("\n");
 }
 
 
@@ -148,22 +193,24 @@ int main(int argc, char** argv) {
     MALLOC_1D(x, DATA_TYPE, N);
     MALLOC_1D(w, DATA_TYPE, N);
     MALLOC_2D(A, DATA_TYPE, N, N);
-    
-    init_data(&alpha, &beta, u1, u2, v1, v2, y, z, x, w, A);
-    
+        
     // printf("N: %d\n", N);
     // printf("%f", IDX_1D(x, 9));
     
+    // compute total time
+    struct timespec start, end;
+    init_data(&alpha, &beta, u1, u2, v1, v2, y, z, x, w, A);
     flush_cache();
-
-    struct timespec start, end; 
-    clock_gettime(CLOCK_MONOTONIC_RAW, &start);
     
+    clock_gettime(CLOCK_MONOTONIC_RAW, &start);
     kernel_gemver(alpha, beta, u1, u2, v1, v2, y, z, x, w, A); 
-
     clock_gettime(CLOCK_MONOTONIC_RAW, &end);
 
+    // clock_gettime(CLOCK_MONOTONIC_RAW, &end);
+
     printf("Time: %f\n", (end.tv_sec - start.tv_sec) + 1e-9 * (end.tv_nsec - start.tv_nsec));
+    // printf("Total 10 Run Time: %f\n", (end.tv_sec - start.tv_sec) + 1e-9 * (end.tv_nsec - start.tv_nsec));
+
 
     // Don't forget to free allocated memory
     free(u1);

@@ -2,6 +2,8 @@
 #include <stdlib.h>
 #include <time.h> 
 #include <assert.h>
+#include <omp.h>
+
 
 // Problem size
 // #define N 30000
@@ -67,9 +69,10 @@ void init_data(
     *alpha = 1.5;
     *beta = 1.2;
 
+    #pragma omp parallel for 
     for (int i = 0; i < N; i++)
     {   
-        u1[i] = i;
+        u1[i] = i; 
         u2[i] = ((i+1)/fn)/2.0;
         v1[i] = ((i+1)/fn)/4.0;
         v2[i] = ((i+1)/fn)/6.0;
@@ -78,64 +81,86 @@ void init_data(
         x[i] = 0.0;
         w[i] = 0.0;
 
-        for (int j = 0; j < N; j++)
-            IDX_2D(A, i, j, N) = (DATA_TYPE) (i*j % N) / N;
-        }
+        for (int j = 0; j < N; j++) IDX_2D(A, i, j, N) = (DATA_TYPE) (i*j % N) / N;
+    }
 }
 
 void kernel_gemver(DATA_TYPE alpha,
     DATA_TYPE beta,
-    DATA_TYPE *u1,
-    DATA_TYPE *u2, 
-    DATA_TYPE *v1,
-    DATA_TYPE *v2, 
-    DATA_TYPE *y,
-    DATA_TYPE *z,
-    DATA_TYPE *x,
-    DATA_TYPE *w,
-    DATA_TYPE *A) {
+    DATA_TYPE *restrict u1,
+    DATA_TYPE *restrict u2, 
+    DATA_TYPE *restrict v1,
+    DATA_TYPE *restrict v2, 
+    DATA_TYPE *restrict y,
+    DATA_TYPE *restrict z,
+    DATA_TYPE *restrict x,
+    DATA_TYPE *restrict w,
+    DATA_TYPE *restrict A) {
     int i, j; 
+   
+    #pragma omp parallel 
+    {
+      //print number of threads 
+      // int thread_id = omp_get_thread_num(); // Get the thread number within the team
+      // int num_threads = omp_get_num_threads(); // Get the total number of threads in the team
+      // printf("Hello from OpenMP thread %d out of %d\n", thread_id, num_threads);
 
-    for (i = 0; i < N; i++)
+      #pragma omp for schedule(static, 64)
+      for (i = 0; i < N; i++) 
         for (j = 0; j < N; j++)
-        //A[i * N + j] = A[i * N + j] + u1[i] * v1[j] + u2[i] * v2[j];
-        IDX_2D(A, i, j, N) = IDX_2D(A, i, j, N) + u1[i] * v1[j] + u2[i] * v2[j];
-    
-//     printf("Gathered A_hat:\n");
-//     for (int i = 0; i < N; i++) {
-//         for (int j = 0; j < N; j++) {
-//             printf("%f ", IDX_2D(A, i, j, N));
-//       }
-//       printf("\n");
-//    }
+            A[i * N + j] = A[i * N + j] + u1[i] * v1[j] + u2[i] * v2[j];
+      
 
-    for (i = 0; i < N; i++)
-        for (j = 0; j < N; j++)
-            x[i] = x[i] + beta * IDX_2D(A, j, i, N)*y[j];
+      int B = 8;
+
+      #pragma omp for schedule(static, 64)
+      for (int ii = 0; ii < N; ii += B) {
+          for (int jj = 0; jj < N; jj += B) {
+              for (int i = ii; i < ii + B && i < N; i++) {
+                  for (int j = jj; j < jj + B && j < N; j++) {
+                      x[i] = x[i] + beta * A[j*N+i] * y[j];
+                  }
+              }
+          }
+      }
 
 
-    for (i = 0; i < N; i++)
-        x[i] = x[i] + z[i];
+      #pragma omp for simd schedule(static, 64) aligned(x, z: 64)
+      for (i = 0; i < N; i++)
+          x[i] = x[i] + z[i];
 
-    // printf("Gathered x:\n");
-    // for (int i = 0; i < N; i++) {
-    //     printf("%f ", x[i]);
-    // }
-    // printf("\n");
 
-    for (i = 0; i < N; i++)
-        for (j = 0; j < N; j++)
-        w[i] = w[i] +  alpha * IDX_2D(A, i, j, N) * x[j];
+      #pragma omp for schedule(static, 64)
+      for (i = 0; i < N; i++)
+          for (j = 0; j < N; j++)
+            w[i] = w[i] + alpha * A[i*N+j] * x[j];
 
-    // printf("Gathered w:\n");
-    // for (int i = 0; i < N; i++) {
-    //     printf("%f ", w[i]);
-    // }
-    // printf("\n");
+    }
+
+  //   printf("Gathered A_hat:\n");
+  //   for (int i = 0; i < N; i++) {
+  //       for (int j = 0; j < N; j++) {
+  //           printf("%f ", IDX_2D(A, i, j, N));
+  //     }
+  //     printf("\n");
+  //  }
+
+  //   printf("Gathered x:\n");
+  //   for (int i = 0; i < N; i++) {
+  //       printf("%f ", x[i]);
+  //   }
+  //   printf("\n");
+
+  //   printf("Gathered w:\n");
+  //   for (int i = 0; i < N; i++) {
+  //       printf("%f ", w[i]);
+  //   }
+  //   printf("\n");
 }
 
 
 int main(int argc, char** argv) {
+
     /* Variable declaration/allocation. */
     DATA_TYPE alpha;
     DATA_TYPE beta; 
@@ -174,7 +199,7 @@ int main(int argc, char** argv) {
     free(z);
     free(x);
     free(w);
-    free(A);
+    free(A);    
     
     return 0;
 }
