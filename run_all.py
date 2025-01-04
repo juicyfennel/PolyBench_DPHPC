@@ -16,15 +16,15 @@ sizes = [
 #     [40000,2,["std","std_fastest"],10],
 
 # ]
-            
-# sizes = [
-#     [40000,0,["omp_blocked"],100],
-#     [42000,1,["mpi+omp"],100],
-#     [45000,1,["omp_blocked"],200],
-#     [46000,2,["mpi+omp","omp_blocked"],100],
-#     [50000,2,["omp"],200],
-#     [54000,4,["mpi+omp","omp_blocked"],100],
-#     ]
+sizes = [[40000,2,["omp_fastest"],200]]
+
+sizes = [
+    [20000,2,["mpi_fastest"],200],
+    [28284,4,["mpi_fastest"],200],
+    [40000,8,["mpi_fastest"],200],
+    [56568,16,["mpi_fastest"],200],
+    [80000,32,["mpi_fastest"],200],
+    ]
 num_runs = 1
 # interfaces = ["mpi", "mpi_gather", "mpi+omp", "mpi+omp_gather"]
 # interfaces = ["omp", "omp_blocked", "mpi", "mpi+omp"]

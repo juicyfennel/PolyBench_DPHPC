@@ -37,6 +37,7 @@ interfaces = {
     "omp_blocked" : "_omp_opt_first_touch",
     "omp_fastest" : "_omp_fastest",
     "mpi": "_mpi",
+    "mpi_fastest": "_mpi_fastest",
     "blas": "_blas", "mpi_gather": "_mpi_plus_gather",
     "mpi+omp": "_mpi+omp",
     "mpi+omp_gather" : "_mpi+omp_plus_gather",
@@ -206,6 +207,7 @@ def compile(datasets):
                     or interface == "omp_fastest"
                     or interface == "blas"
                     or interface == "mpi+omp"
+                    or interface == "mpi+omp_fastest"
                     or interface == "mpi+omp_gather"
                     else ""
                 )
@@ -315,10 +317,10 @@ def run_euler(kernel, interface, p, filename, out_dir_run, t=0):
     content += f"#SBATCH --nodelist={','.join(nodelist)}\n"
 
 
-    if interface=="mpi" or interface=="mpi_gather": 
+    if interface=="mpi" or interface=="mpi_gather" or interface=="mpi_fastest": 
         content += f"#SBATCH --nodes={mpi_config['nodes']}\n"
         content += f"#SBATCH --ntasks={p}\n"
-        if interface == "mpi":
+        if interface == "mpi" or interface == "mpi_fastest":
             content += f"#SBATCH --mem-per-cpu={int(mpi_config['total_memory']/p)}\n\n"
         if interface == "mpi_gather":
             content += f"#SBATCH --mem-per-cpu={int(mpi_gather_config['total_memory']/p)}\n\n"
@@ -335,11 +337,11 @@ def run_euler(kernel, interface, p, filename, out_dir_run, t=0):
         content += f"export OMP_PLACES={omp_config['places']}\n"
         content += f"export OMP_PROC_BIND={omp_config['proc_bind']}\n\n"
 
-    elif interface == "mpi+omp" or interface == "mpi+omp_gather":
+    elif interface == "mpi+omp" or interface == "mpi+omp_gather" or interface == "mpi+omp_fastest":
         content += f"#SBATCH --nodes={mpi_omp_config['nodes']}\n"
         content += f"#SBATCH --ntasks={p}\n"
         content += f"#SBATCH --cpus-per-task={t}\n"
-        if interface == "mpi+omp":
+        if interface == "mpi+omp" or interface == "mpi+omp_fastest":
             content += f"#SBATCH --mem-per-cpu={int(mpi_omp_config['total_memory']/(p*t))}\n\n"
         else:
             content += f"#SBATCH --mem-per-cpu={int(mpi_omp_gather_config['total_memory']/(p*t))}\n\n"
@@ -457,6 +459,15 @@ def run(datasets, on_euler):
                                 "w",
                             ) as f:
                                 json.dump(mpi_omp_gather_config, f, indent=4)
+                        if interface == "mpi+omp_fastest":
+                            json_file = "mpi_omp_fastest.json"
+                            if args.nodes:
+                                json_file = f"mpi_omp_fastest_{args.nodes}.json"
+                            with open(
+                                os.path.join(output_dir, json_file),
+                                "w",
+                            ) as f:
+                                json.dump(mpi_omp_config, f, indent=4)
                         if on_euler:
                             run_euler(
                                 kernel,
@@ -516,6 +527,15 @@ def run(datasets, on_euler):
                             "w",
                         ) as f:
                             json.dump(mpi_gather_config, f, indent=4)
+                    if interface == "mpi_fastest":
+                        json_file = "mpi_fastest.json"
+                        if args.nodes:
+                            json_file = f"mpi_fastest_{args.nodes}.json"
+                        with open(
+                            os.path.join(output_dir, json_file),
+                            "w",
+                        ) as f:
+                            json.dump(mpi_config, f, indent=4)
 
                     # Local
                     if on_euler:
