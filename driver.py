@@ -20,10 +20,13 @@ inputsizes = {
 
 
 # Number of processes to test, always include 1 if you want to test the serial version
-num_processes = [2, 4, 8, 12, 16, 24, 32]  # MAX 48
+# num_processes = [2, 4, 8, 12, 16, 24, 32]  # MAX 48
+num_processes = [2, 4, 8, 16, 32]  # MAX 48
 # num_processes = [1,24]
 # num_processes = [1, 2, 4, 8]  # MAX 48
-processes_threads = [(2,1), (2,2), (4,2), (4,3), (4,4), (6,4), (8,4)] #20 24 28  32
+# processes_threads = [(2,1), (2,2), (4,2), (4,3), (4,4), (6,4), (8,4)] #20 24 28  32
+processes_threads = [(2,1), (2,2), (4,2), (4,4), (8,4)] #20 24 28  32
+
 # processes_threads = [(6,4)]
 
 interfaces = {
@@ -126,7 +129,7 @@ parser.add_argument(
     type=int,
     nargs="+",
     help="Number of processes/threads",
-    default=[2],
+    default=[2,4,8,16,32],
 )
 
 args = parser.parse_args()
@@ -149,6 +152,7 @@ for nbOfProcesses in args.processes:
     for nbOfProcesses_threads in processes_threads:
         if nbOfProcesses_threads[0]*nbOfProcesses_threads[1] == nbOfProcesses:
             processes_threads_tmp.append(nbOfProcesses_threads)
+            continue
 processes_threads = processes_threads_tmp
 
 # # compile

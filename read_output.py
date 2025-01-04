@@ -130,7 +130,7 @@ for dir in dirs:
                 "STD": variability,
                 "num-runs": len(max_runtimes)
             })
-        elif run_type in {"omp", "omp_blocked"}:
+        elif run_type in {"omp", "omp_blocked", "omp_fastest"}:
             if valid_lines and len(valid_lines) >= clusters:
                 valid_lines = get_fast_group(valid_lines,date,dir,clusters)
                 mean_runtime = np.mean(valid_lines)
@@ -144,7 +144,7 @@ for dir in dirs:
                     "STD": variability,
                     "num-runs": len(valid_lines)
                 })
-        elif (run_type == "std" or run_type == "std_blocked"):
+        elif (run_type == "std" or run_type == "std_blocked" or run_type == "std_fastest"):
             if valid_lines and len(valid_lines) >= clusters:
                 valid_lines = get_fast_group(valid_lines,date,dir,clusters)
                 mean_runtime = np.mean(valid_lines)
@@ -176,34 +176,19 @@ for size in rows:
 # Combine all rows into a single DataFrame
 all_data = pd.concat([pd.DataFrame(rows[size]) for size in rows])
 
-# Define selection conditions for the final CSV files
-conditions_1 = [
-    (40000, 2), (45000, 4), (50000, 8), (55000, 12),
-    (60000, 16), (65000, 24), (70000, 32)
-]
-conditions_2 = [
-    (40000, 2), (42000, 4), (46000, 8), (50000, 12),
-    (54000, 16), (62000, 24), (70000, 32)
+# Define selection conditions for the final CSV file
+conditions = [
+    (20000, 2), (28284, 4), (40000, 8),
+    (56568, 16), (80000, 32)
 ]
 
 # Filter and save weak_scaling_data_1.csv
-weak_scaling_data_1 = all_data[
+weak_scaling_data = all_data[
     all_data.apply(
-        lambda x: (x["Size"], x["Processes"]) in conditions_1 and
-                  x["Type"] in {"omp", "omp_blocked", "mpi", "mpi+omp"},
+        lambda x: (x["Size"], x["Processes"]) in conditions and
+                  x["Type"] in {"omp_fastest", "mpi_fastest", "mpi+omp_fastest"},
         axis=1
     )
 ]
-weak_scaling_data_1.to_csv(os.path.join(analysis_dir, "weak_scaling_data_1.csv"), index=False)
-print(f"Weak scaling data 1 saved to {os.path.join(analysis_dir, 'weak_scaling_data_1.csv')}")
-
-# Filter and save weak_scaling_data_2.csv
-weak_scaling_data_2 = all_data[
-    all_data.apply(
-        lambda x: (x["Size"], x["Processes"]) in conditions_2 and
-                  x["Type"] in {"omp", "omp_blocked", "mpi", "mpi+omp"},
-        axis=1
-    )
-]
-weak_scaling_data_2.to_csv(os.path.join(analysis_dir, "weak_scaling_data_2.csv"), index=False)
-print(f"Weak scaling data 2 saved to {os.path.join(analysis_dir, 'weak_scaling_data_2.csv')}")
+weak_scaling_data.to_csv(os.path.join(analysis_dir, "weak_scaling_data_1.csv"), index=False)
+print(f"Weak scaling data saved to {os.path.join(analysis_dir, 'weak_scaling_data.csv')}")

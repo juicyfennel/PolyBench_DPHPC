@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 
 def get_fast_group(times, plot_dir="clusters", plot_name="cluster_plot.png", n_clusters=4):
     """
-    Perform clustering on execution times to separate them into 4 groups and return the fastest group.
+    Perform clustering on execution times to separate them into groups and return the fastest group.
 
     Parameters:
         times (list or np.array): A list of execution times.
@@ -28,18 +28,22 @@ def get_fast_group(times, plot_dir="clusters", plot_name="cluster_plot.png", n_c
     fastest_cluster_index = np.argmin([np.mean(cluster) for cluster in clusters])
     fastest_cluster = clusters[fastest_cluster_index]
 
-     # Plot all clusters
+    # Create the directory for plots if it doesn't exist
     plot_dir = "mainplots/clusters/" + plot_dir
     os.makedirs(plot_dir, exist_ok=True)
+
+    # Plot all clusters
     plt.figure(figsize=(10, 6))
     colors = ['blue', 'orange', 'green', 'red']
     for i, cluster in enumerate(clusters):
-        plt.hist(cluster, bins=15, alpha=0.7, label=f"Cluster {i+1} (Mean = {np.mean(cluster):.2f})", color=colors[i])
+        plt.hist(cluster, bins=15, alpha=0.7,
+                 label=f"Cluster {i+1} (Mean = {np.mean(cluster):.2f}, Size = {len(cluster)})",
+                 color=colors[i])
         plt.axvline(np.mean(cluster), color=colors[i], linestyle="dashed", linewidth=1)
 
     plt.xlabel("Execution Time")
     plt.ylabel("Frequency")
-    plt.title("Clustering of Execution Times into 4 Groups")
+    plt.title(f"Clustering of Execution Times into {n_clusters} Groups")
     plt.legend()
     plt.tight_layout()
 
