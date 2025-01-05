@@ -164,7 +164,7 @@ static void kernel_jacobi_2d(int tsteps,
 
     MPI_Waitall(8, mpi_requests, MPI_STATUSES_IGNORE);
 
-    // Update B matrix
+    #pragma omp  parallel for
     for (i = 1; i < block_height + 1; i++) {
       for (j = 1; j < block_length + 1; j++) {
         B[i][j] = SCALAR_VAL(0.2) * (A[i][j] + A[i][j - 1] + A[i][1 + j] + A[1 + i][j] + A[i - 1][j]);
