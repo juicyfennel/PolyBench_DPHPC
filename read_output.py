@@ -4,6 +4,7 @@ import re
 import pandas as pd
 import numpy as np
 from datetime import datetime
+from k_means import get_fast_group
 
 # Argument parser
 parser = argparse.ArgumentParser(description="Process runtime outputs into CSV files")
@@ -13,7 +14,16 @@ parser.add_argument(
     help="Path to the specific directory containing benchmark outputs (e.g., ./outputs/2024_12_15__14-30-45). Defaults to the latest folder in ./outputs.",
 )
 
+parser.add_argument(
+    "--clusters",
+    type=int,
+    default=1,
+    help="Number of clusters to use for K-means clustering. Defaults to 1.",
+)
+
 args = parser.parse_args()
+
+clusters = args.clusters
 
 # Base directory
 output_base = "./outputs"
@@ -42,7 +52,7 @@ else:
 
 print(f"Processing directory: {output_dir}")
 
-rows = []
+rows = {}
 time_pattern = re.compile(r"Time:\s*([\d.]+)")
 
 # Process the provided or determined benchmark folder
@@ -51,16 +61,19 @@ dirs = [
     for f in os.listdir(output_dir)
     if os.path.isdir(os.path.join(output_dir, f))
 ]
+date = output_dir.split("/")[-1]
 
 for dir in dirs:
-    match = re.match(r"^(?P<kernel>[A-Za-z0-9-_]+)_N_(?P<size>\d+)_np_(?P<processes>\d+)_nn_(?P<nodes>\d+)_(?P<type>[\w+]+)$", dir)
+    match = re.match(r"^(?P<kernel>[A-Za-z0-9-_]+)_N_(?P<size>\d+)_np_(?P<processes>\d+)_(?P<type>[\w+]+)$", dir)
     if not match:
         continue
 
     kernel = match.group("kernel")
     size = int(match.group("size"))
+    if size not in rows:
+        rows[size] =[]
     num_processes = int(match.group("processes"))
-    num_nodes = int(match.group("nodes"))
+    num_processes_original = num_processes
     run_type = match.group("type")
 
     out_dir = os.path.join(output_dir, dir)
@@ -69,13 +82,20 @@ for dir in dirs:
     for file in out_files:
         with open(os.path.join(out_dir, file), "r") as f:
             lines = f.readlines()
-
+        if run_type == "mpi+omp" or run_type == "mpi+omp_gather":   
+            num_processes = 0
+        flag = False
         valid_lines = []
         for line in lines:
             match = time_pattern.search(line)
+            if run_type == "mpi+omp" or run_type == "mpi+omp_gather":
+                if "=" in line:
+                    flag = True
             if match:
                 try:
                     runtime = float(match.group(1))
+                    if (run_type == "mpi+omp" or run_type == "mpi+omp_gather") and not flag:
+                        num_processes += 1
                     valid_lines.append(runtime)
                 except ValueError:
                     continue
@@ -96,52 +116,81 @@ for dir in dirs:
                 if len(run) == num_processes:
                     max_runtime = max(run)
                     max_runtimes.append(max_runtime)
+            if len(max_runtimes) < clusters:
+                continue
+            max_runtimes = get_fast_group(max_runtimes,date,dir,clusters)
             mean_runtime = np.mean(max_runtimes)
             variability = np.std(max_runtimes)
-            rows.append({
+            rows[size].append({
                 "Kernel": kernel,
                 "Size": size,
-                "Processes": num_processes,
-                "Nodes": num_nodes,
+                "Processes": num_processes_original,
                 "Type": run_type,
                 "Mean Runtime": mean_runtime,
-                "STD": variability
+                "STD": variability,
+                "num-runs": len(max_runtimes)
             })
-        elif run_type == "omp":
-            if valid_lines:
+        elif run_type in {"omp", "omp_blocked", "omp_fastest"}:
+            if valid_lines and len(valid_lines) >= clusters:
+                valid_lines = get_fast_group(valid_lines,date,dir,clusters)
                 mean_runtime = np.mean(valid_lines)
                 variability = np.std(valid_lines)
-                rows.append({
+                rows[size].append({
                     "Kernel": kernel,
                     "Size": size,
                     "Processes": num_processes,
                     "Nodes": 1,
                     "Type": run_type,
                     "Mean Runtime": mean_runtime,
-                    "STD": variability
+                    "STD": variability,
+                    "num-runs": len(valid_lines)
                 })
-        elif run_type == "std":
-            if valid_lines:
+        elif (run_type == "std" or run_type == "std_blocked" or run_type == "std_fastest"):
+            if valid_lines and len(valid_lines) >= clusters:
+                valid_lines = get_fast_group(valid_lines,date,dir,clusters)
                 mean_runtime = np.mean(valid_lines)
                 variability = np.std(valid_lines)
-                rows.append({
+                rows[size].append({
                     "Kernel": kernel,
                     "Size": size,
                     "Processes": 1,
                     "Nodes": 1,
                     "Type": run_type,
                     "Mean Runtime": mean_runtime,
-                    "STD": variability  
+                    "STD": variability,
+                    "num-runs": len(valid_lines)  
                 })
 
 # Create a DataFrame
-df = pd.DataFrame(rows)
+# df = pd.DataFrame(rows)
 
 # Create a new runtime_analysis directory with the same date_time as the source
 analysis_dir = os.path.join("./runtime_analysis", os.path.basename(output_dir))
 os.makedirs(analysis_dir, exist_ok=True)
 
-# Save a single CSV file for the processed data
-output_file = os.path.join(analysis_dir, "runtime_analysis.csv")
-df.to_csv(output_file, index=False)
-print(f"Runtime analysis saved to {output_file}")
+# Save individual CSV files for each size
+for size in rows:
+    output_file = os.path.join(analysis_dir, f"runtime_analysis_{size}.csv")
+    df = pd.DataFrame(rows[size])
+    df.to_csv(output_file, index=False)
+    print(f"Runtime analysis for size {size} saved to {output_file}")
+
+# Combine all rows into a single DataFrame
+all_data = pd.concat([pd.DataFrame(rows[size]) for size in rows])
+
+# Define selection conditions for the final CSV file
+conditions = [
+    (20000, 2), (28284, 4), (40000, 8),
+    (56568, 16), (80000, 32)
+]
+
+# Filter and save weak_scaling_data_1.csv
+weak_scaling_data = all_data[
+    all_data.apply(
+        lambda x: (x["Size"], x["Processes"]) in conditions and
+                  x["Type"] in {"omp_fastest", "mpi_fastest", "mpi+omp_fastest"},
+        axis=1
+    )
+]
+weak_scaling_data.to_csv(os.path.join(analysis_dir, "weak_scaling_data_1.csv"), index=False)
+print(f"Weak scaling data saved to {os.path.join(analysis_dir, 'weak_scaling_data.csv')}")

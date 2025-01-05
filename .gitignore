@@ -44,3 +44,7 @@ runtime_analysis/*
 myRuns/*
 
 plotting_and_data/*
+
+mainplots/*
+
+__pycache__/*
