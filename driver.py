@@ -311,7 +311,7 @@ def run_euler(kernel, interface, p, filename, out_dir_run, t=0):
     if interface=="mpi" or interface=="mpi_gather" or interface=="mpi_fastest" or interface=="mpi_rma": 
         content += f"#SBATCH --nodes={mpi_config['nodes']}\n"
         content += f"#SBATCH --ntasks={p}\n"
-        if interface == "mpi" or interface == "mpi_fastest":
+        if interface == "mpi" or interface == "mpi_fastest" or interface == "mpi_rma":
             content += f"#SBATCH --mem-per-cpu={int(mpi_config['total_memory']/p)}\n\n"
         if interface == "mpi_gather":
             content += f"#SBATCH --mem-per-cpu={int(mpi_gather_config['total_memory']/p)}\n\n"
