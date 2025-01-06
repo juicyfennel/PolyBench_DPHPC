@@ -10,8 +10,7 @@ from k_means import get_fast_group
 parser = argparse.ArgumentParser(description="Process runtime outputs into CSV files")
 parser.add_argument(
     "--dir",
-    default=None,
-    help="Path to the specific directory containing benchmark outputs (e.g., ./outputs/2024_12_15__14-30-45). Defaults to the latest folder in ./outputs.",
+    help="Path to the specific directory containing benchmark outputs (e.g., ./outputs/2024_12_15__14-30-45).",
 )
 
 parser.add_argument(
@@ -53,7 +52,7 @@ else:
 print(f"Processing directory: {output_dir}")
 
 rows = {}
-time_pattern = re.compile(r"Time:\s*([\d.]+)")
+time_pattern = re.compile(r"Time(?: for Kernel calculation)?:\s*([\d.]+)")
 
 # Process the provided or determined benchmark folder
 dirs = [
@@ -82,19 +81,19 @@ for dir in dirs:
     for file in out_files:
         with open(os.path.join(out_dir, file), "r") as f:
             lines = f.readlines()
-        if run_type == "mpi+omp" or run_type == "mpi+omp_gather":   
+        if run_type.startswith("mpi+omp"):   
             num_processes = 0
         flag = False
         valid_lines = []
         for line in lines:
             match = time_pattern.search(line)
-            if run_type == "mpi+omp" or run_type == "mpi+omp_gather":
+            if run_type.startswith("mpi+omp"):
                 if "=" in line:
                     flag = True
             if match:
                 try:
                     runtime = float(match.group(1))
-                    if (run_type == "mpi+omp" or run_type == "mpi+omp_gather") and not flag:
+                    if run_type.startswith("mpi+omp") and not flag:
                         num_processes += 1
                     valid_lines.append(runtime)
                 except ValueError:
@@ -130,7 +129,7 @@ for dir in dirs:
                 "STD": variability,
                 "num-runs": len(max_runtimes)
             })
-        elif run_type in {"omp", "omp_blocked", "omp_fastest"}:
+        elif run_type in {"omp", "omp_blocked", "omp_fastest", "omp_fastest2"}:
             if valid_lines and len(valid_lines) >= clusters:
                 valid_lines = get_fast_group(valid_lines,date,dir,clusters)
                 mean_runtime = np.mean(valid_lines)
@@ -186,9 +185,9 @@ conditions = [
 weak_scaling_data = all_data[
     all_data.apply(
         lambda x: (x["Size"], x["Processes"]) in conditions and
-                  x["Type"] in {"omp_fastest", "mpi_fastest", "mpi+omp_fastest"},
+                  x["Type"] in {"omp","omp_fastest","mpi", "mpi_fastest", "mpi+omp", "mpi+omp_fastest"},
         axis=1
     )
 ]
-weak_scaling_data.to_csv(os.path.join(analysis_dir, "weak_scaling_data_1.csv"), index=False)
+weak_scaling_data.to_csv(os.path.join(analysis_dir, "weak_scaling_data.csv"), index=False)
 print(f"Weak scaling data saved to {os.path.join(analysis_dir, 'weak_scaling_data.csv')}")

@@ -32,6 +32,18 @@ sizes = [
     [56568,16,["omp_fastest2"],1],
     [80000,32,["omp_fastest2"],1],
     ]
+sizes = [
+    [20000,2,["omp"],200],
+    [28284,4,["omp"],200],
+    [40000,8,["omp"],200],
+    [56568,16,["omp"],200],
+    [80000,32,["omp"],200],
+    ]
+sizes = [
+    [20000,2,["mpi"],200],
+    [28284,4,["mpi"],200],
+    [40000,8,["mpi"],200],
+    ]
 num_runs = 1
 # interfaces = ["mpi", "mpi_gather", "mpi+omp", "mpi+omp_gather"]
 # interfaces = ["omp", "omp_blocked", "mpi", "mpi+omp"]
@@ -56,7 +68,7 @@ for size in sizes:
             str(size[0]),
             "--processes",
             str(size[1]),
-            # "--no-compile",
+            "--no-compile",
             "--interfaces",
         ] + size[2]
         subprocess.run(cmd)

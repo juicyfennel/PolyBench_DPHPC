@@ -16,39 +16,39 @@ def combine_out_files(parent_dirs, combined_dir):
                 all_subdirs.add(subdir)
 
     # Create an error log file
-    error_log_path = os.path.join(combined_dir, "missing_files.err")
-    with open(error_log_path, "w") as error_log:
-        # Process each subdirectory
-        for subdir in all_subdirs:
-            combined_subdir_path = os.path.join(combined_dir, subdir)
-            os.makedirs(combined_subdir_path, exist_ok=True)
+    # error_log_path = os.path.join(combined_dir, "missing_files.err")
+    # with open(error_log_path, "w") as error_log:
+    # Process each subdirectory
+    for subdir in all_subdirs:
+        combined_subdir_path = os.path.join(combined_dir, subdir)
+        os.makedirs(combined_subdir_path, exist_ok=True)
 
-            # Collect all *.out files from this subdirectory across parent directories
-            combined_content = []
-            merged_file_count = 0
-            for parent in parent_dirs:
-                subdir_path = os.path.join(parent, subdir)
-                if os.path.exists(subdir_path):
-                    out_files = [file for file in os.listdir(subdir_path) if file.endswith(".out")]
-                    if out_files:
-                        for file in out_files:
-                            file_path = os.path.join(subdir_path, file)
-                            with open(file_path, "r") as f:
-                                combined_content.append(f.read())
-                                merged_file_count += 1
-                    else:
-                        # Log missing .out files
-                        error_log.write(f"Missing .out files in: {subdir_path}\n")
-                else:
-                    # Log missing subdirectory
-                    error_log.write(f"Missing subdirectory: {subdir_path}\n")
+        # Collect all *.out files from this subdirectory across parent directories
+        combined_content = []
+        merged_file_count = 0
+        for parent in parent_dirs:
+            subdir_path = os.path.join(parent, subdir)
+            if os.path.exists(subdir_path):
+                out_files = [file for file in os.listdir(subdir_path) if file.endswith(".out")]
+                if out_files:
+                    for file in out_files:
+                        file_path = os.path.join(subdir_path, file)
+                        with open(file_path, "r") as f:
+                            combined_content.append(f.read())
+                            merged_file_count += 1
+                # else:
+                #     # Log missing .out files
+                #     error_log.write(f"Missing .out files in: {subdir_path}\n")
+            # else:
+            #     # Log missing subdirectory
+            #     error_log.write(f"Missing subdirectory: {subdir_path}\n")
 
-            # Write the concatenated content to a single file in the combined directory
-            if combined_content:
-                output_file_name = f"{merged_file_count}_files_merged.out"
-                output_file_path = os.path.join(combined_subdir_path, output_file_name)
-                with open(output_file_path, "w") as output_file:
-                    output_file.write("\n".join(combined_content))
+        # Write the concatenated content to a single file in the combined directory
+        if combined_content:
+            output_file_name = f"{merged_file_count}_files_merged.out"
+            output_file_path = os.path.join(combined_subdir_path, output_file_name)
+            with open(output_file_path, "w") as output_file:
+                output_file.write("\n".join(combined_content))
 
 parent_dirs = []
 # Example usage
@@ -94,7 +94,7 @@ parent_dirs = []
 
 patterns = ["2024_12_30_20","2024_12_31", "2025"]
 # patterns = ["2024_12_20__13-00-00","2024_12_20__08-29-26","2024_12_19__2","2024_12_19__15-13-27","2024_12_19__14-01-25","2024_12_19__13"]  # for 20k iterations 
-patterns = ["2025_01_04"]  
+patterns = ["2025_01_04","2025_01_05"]  
 # Collect directories matching the patterns
 for entry in os.listdir(base_dir):
     if any(entry.startswith(pattern) for pattern in patterns):
@@ -103,5 +103,5 @@ for entry in os.listdir(base_dir):
             parent_dirs.append(full_path)
 parent_dirs = list(set(parent_dirs))  # Remove duplicates
 parent_dirs.sort()  # Sort the list
-combined_dir = "myRuns/merged/2025_01_04"    # Name of the combined output directory
+combined_dir = "myRuns/merged/2025_01_05"    # Name of the combined output directory
 combine_out_files(parent_dirs, combined_dir)
