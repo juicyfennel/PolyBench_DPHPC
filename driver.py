@@ -14,8 +14,8 @@ kernels = {
 
 inputsizes = {
     "jacobi-2d": {
-        "TSTEPS": 500,
-        "N": 3362
+        "TSTEPS": 10,
+        "N": 14142
     },
     "gemver": {
         "N": 10000
@@ -24,11 +24,12 @@ inputsizes = {
 
 # Number of processes to test, always include 1 if you want to test the serial version
 # num_processes = [2, 4, 8, 12, 16, 24, 32]  # MAX 48
-num_processes = [1,2, 4, 8, 16, 32]  # MAX 48
+num_processes = [1, 4, 9, 16, 25, 36]  # MAX 48
 # num_processes = [1,24]
 # num_processes = [1, 2, 4, 8]  # MAX 48
 # processes_threads = [(2,1), (2,2), (4,2), (4,3), (4,4), (6,4), (8,4)] #20 24 28  32
-processes_threads = [(2,1), (2,2), (4,2), (4,4), (8,4)] #20 24 28  32
+# processes_threads = [(4,2), (4,4), (9,2), (4,9), (9,4)] #20 24 28  32
+processes_threads = [(9,4)]
 
 # processes_threads = [(6,4)]
 
@@ -44,6 +45,7 @@ interfaces = {
     "blas": "_blas", "mpi_gather": "_mpi_plus_gather",
     "mpi+omp": "_mpi+omp",
     "mpi+omp_gather" : "_mpi+omp_plus_gather",
+    "mpi_rma": "_mpi_rma"
 }
 
 
@@ -102,7 +104,7 @@ parser.add_argument(
     type=str,
     nargs="+",
     help="Interfaces to run (default = all) (selection: 'std', 'omp', 'mpi')",
-    default=["std", "omp", "mpi", "omp+mpi"]
+    default=["std", "omp", "mpi", "mpi+omp"]
     # default=["std", "omp", "mpi"]
 )
 parser.add_argument(
@@ -306,8 +308,7 @@ def run_euler(kernel, interface, p, filename, out_dir_run, t=0):
     # content += "#SBATCH --nodelist=eu-g9-028-4\n"
     content += f"#SBATCH --nodelist={','.join(nodelist)}\n"
 
-
-    if interface=="mpi" or interface=="mpi_gather" or interface=="mpi_fastest": 
+    if interface=="mpi" or interface=="mpi_gather" or interface=="mpi_fastest" or interface=="mpi_rma": 
         content += f"#SBATCH --nodes={mpi_config['nodes']}\n"
         content += f"#SBATCH --ntasks={p}\n"
         if interface == "mpi" or interface == "mpi_fastest":
@@ -528,24 +529,24 @@ def run(datasets, on_euler):
                         ) as f:
                             json.dump(mpi_config, f, indent=4)
 
-                        # Local
-                        if on_euler:
-                            run_euler(
-                                kernel,
-                                interface,
-                                p,
-                                filename,
-                                out_dir_run,
-                            )
-                        # Euler
-                        else:
-                            run_local(
-                                kernel,
-                                interface,
-                                p,
-                                filename,
-                                out_dir_run,
-                            )
+                    # Local
+                    if on_euler:
+                        run_euler(
+                            kernel,
+                            interface,
+                            p,
+                            filename,
+                            out_dir_run,
+                        )
+                    # Euler
+                    else:
+                        run_local(
+                            kernel,
+                            interface,
+                            p,
+                            filename,
+                            out_dir_run,
+                        )
 
 
 def main():
