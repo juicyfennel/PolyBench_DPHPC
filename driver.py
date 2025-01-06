@@ -39,6 +39,7 @@ interfaces = {
     "omp_fastest2": "_omp_fastest2",
     "mpi": "_mpi",
     "mpi_fastest": "_mpi_fastest",
+    "mpi_fastest_128B": "_mpi_fastest_128B",
     "blas": "_blas", "mpi_gather": "_mpi_plus_gather",
     "mpi+omp": "_mpi+omp",
     "mpi+omp_fastest": "_mpi+omp_fastest",
@@ -131,8 +132,16 @@ parser.add_argument(
     "--processes",
     type=int,
     nargs="+",
-    help="Number of processes/threads",
-    default=[2,4,8,16,32],
+    help="Number of processes (also threads for OMP not Hybrid)",
+    default=num_processes,
+)
+
+parser.add_argument(
+    "--processes_threads",
+    type=int,
+    nargs="*",
+    help="Number of processes and threads for mpi+omp",
+    default=[],
 )
 
 args = parser.parse_args()
@@ -148,15 +157,19 @@ if args.nodes:
  
 if args.size:
     inputsizes["gemver"] = [{"N": args.size}]
-num_processes = [1]
-processes_threads_tmp = []
-for nbOfProcesses in args.processes:
-    num_processes.append(nbOfProcesses)
-    for nbOfProcesses_threads in processes_threads:
-        if nbOfProcesses_threads[0]*nbOfProcesses_threads[1] == nbOfProcesses:
-            processes_threads_tmp.append(nbOfProcesses_threads)
-            continue
-processes_threads = processes_threads_tmp
+
+num_processes = [1] + args.processes
+if args.processes_threads:
+    def parse_processes_threads(values):
+        if len(values) % 2 != 0:
+            raise argparse.ArgumentTypeError("The --processes_threads argument must contain an even count of values.")
+        return [(int(values[i]), int(values[i + 1])) for i in range(0, len(values), 2)]
+    try:
+        processes_threads = parse_processes_threads(args.processes_threads)
+    except argparse.ArgumentTypeError as e:
+        print(f"Error: {e}")
+        sys.exit(1)
+
 
 # # compile
 def compile(datasets):
@@ -320,10 +333,10 @@ def run_euler(kernel, interface, p, filename, out_dir_run, t=0):
     content += f"#SBATCH --nodelist={','.join(nodelist)}\n"
 
 
-    if interface=="mpi" or interface=="mpi_gather" or interface=="mpi_fastest": 
+    if interface=="mpi" or interface=="mpi_gather" or interface=="mpi_fastest" or interface == "mpi_fastest_128B": 
         content += f"#SBATCH --nodes={mpi_config['nodes']}\n"
         content += f"#SBATCH --ntasks={p}\n"
-        if interface == "mpi" or interface == "mpi_fastest":
+        if interface == "mpi" or interface == "mpi_fastest" or interface == "mpi_fastest_128B":
             content += f"#SBATCH --mem-per-cpu={int(mpi_config['total_memory']/p)}\n\n"
         if interface == "mpi_gather":
             content += f"#SBATCH --mem-per-cpu={int(mpi_gather_config['total_memory']/p)}\n\n"
@@ -534,6 +547,15 @@ def run(datasets, on_euler):
                         json_file = "mpi_fastest.json"
                         if args.nodes:
                             json_file = f"mpi_fastest_{args.nodes}.json"
+                        with open(
+                            os.path.join(output_dir, json_file),
+                            "w",
+                        ) as f:
+                            json.dump(mpi_config, f, indent=4)
+                    if interface == "mpi_fastest_128B":
+                        json_file = "mpi_fastest_128B.json"
+                        if args.nodes:
+                            json_file = f"mpi_fastest_128B_{args.nodes}.json"
                         with open(
                             os.path.join(output_dir, json_file),
                             "w",

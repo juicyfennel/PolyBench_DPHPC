@@ -44,6 +44,18 @@ sizes = [
     [28284,4,["mpi"],200],
     [40000,8,["mpi"],200],
     ]
+sizes = [[20000,[2,3],[9,2],["std"],1]]
+sizes = [
+    [20000,[2],[],["mpi_fastest_128B"],200],
+    [28284,[4],[],["mpi_fastest_128B"],200],
+    [40000,[8],[],["mpi_fastest_128B"],200],
+    [56568,[16],[],["mpi_fastest_128B"],200],
+    [80000,[32],[],["mpi_fastest_128B"],200],
+    ]
+sizes = [
+    [40000,[],[],["mpi_fastest_128B"],1], # after running this with "1" run for "200" uncommenting "no-compile" taht
+    ]
+
 num_runs = 1
 # interfaces = ["mpi", "mpi_gather", "mpi+omp", "mpi+omp_gather"]
 # interfaces = ["omp", "omp_blocked", "mpi", "mpi+omp"]
@@ -66,9 +78,7 @@ for size in sizes:
             str(num_runs),
             "--size",
             str(size[0]),
-            "--processes",
-            str(size[1]),
-            "--no-compile",
+            # "--no-compile",
             "--interfaces",
-        ] + size[2]
+        ] + size[3] 
         subprocess.run(cmd)
