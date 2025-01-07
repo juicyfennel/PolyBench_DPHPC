@@ -5,9 +5,10 @@ import pandas as pd
 import numpy as np
 from datetime import datetime
 from k_means import get_fast_group
+import json
 
 # Argument parser
-parser = argparse.ArgumentParser(description="Process runtime outputs into CSV files")
+parser = argparse.ArgumentParser(description="Process runtime outputs into CSV and JSON files")
 parser.add_argument(
     "--dir",
     help="Path to the specific directory containing benchmark outputs (e.g., ./outputs/2024_12_15__14-30-45).",
@@ -52,6 +53,7 @@ else:
 print(f"Processing directory: {output_dir}")
 
 rows = {}
+json_data = {}
 time_pattern = re.compile(r"Time(?: for Kernel calculation)?:\s*([\d.]+)")
 
 # Process the provided or determined benchmark folder
@@ -71,6 +73,8 @@ for dir in dirs:
     size = int(match.group("size"))
     if size not in rows:
         rows[size] =[]
+    if size not in json_data:
+        json_data[size] = []
     num_processes = int(match.group("processes"))
     num_processes_original = num_processes
     run_type = match.group("type")
@@ -129,6 +133,17 @@ for dir in dirs:
                 "STD": variability,
                 "num-runs": len(max_runtimes)
             })
+            json_data[size].append({
+                "Kernel": kernel,
+                "Size": size,
+                "Processes": num_processes_original,
+                "Type": run_type,
+                "Mean Runtime": mean_runtime,
+                "STD": variability,
+                "num-runs": len(max_runtimes),
+                "Data Points": max_runtimes
+            })
+
         elif run_type in {"omp", "omp_blocked", "omp_fastest", "omp_fastest2"}:
             if valid_lines and len(valid_lines) >= clusters:
                 valid_lines = get_fast_group(valid_lines,date,dir,clusters)
@@ -143,6 +158,17 @@ for dir in dirs:
                     "STD": variability,
                     "num-runs": len(valid_lines)
                 })
+                json_data[size].append({
+                    "Kernel": kernel,
+                    "Size": size,
+                    "Processes": num_processes,
+                    "Type": run_type,
+                    "Mean Runtime": mean_runtime,
+                    "STD": variability,
+                    "num-runs": len(valid_lines),
+                    "Data Points": valid_lines
+                })
+
         elif (run_type == "std" or run_type == "std_blocked" or run_type == "std_fastest"):
             if valid_lines and len(valid_lines) >= clusters:
                 valid_lines = get_fast_group(valid_lines,date,dir,clusters)
@@ -157,20 +183,30 @@ for dir in dirs:
                     "STD": variability,
                     "num-runs": len(valid_lines)  
                 })
-
-# Create a DataFrame
-# df = pd.DataFrame(rows)
+                json_data[size].append({
+                    "Kernel": kernel,
+                    "Size": size,
+                    "Processes": 1,
+                    "Type": run_type,
+                    "Mean Runtime": mean_runtime,
+                    "STD": variability,
+                    "num-runs": len(valid_lines),
+                    "Data Points": valid_lines
+                })
 
 # Create a new runtime_analysis directory with the same date_time as the source
 analysis_dir = os.path.join("./runtime_analysis", os.path.basename(output_dir))
 os.makedirs(analysis_dir, exist_ok=True)
 
-# Save individual CSV files for each size
+# Save individual CSV and JSON files for each size
 for size in rows:
-    output_file = os.path.join(analysis_dir, f"runtime_analysis_{size}.csv")
+    output_file_csv = os.path.join(analysis_dir, f"runtime_analysis_{size}.csv")
+    output_file_json = os.path.join(analysis_dir, f"runtime_analysis_{size}.json")
     df = pd.DataFrame(rows[size])
-    df.to_csv(output_file, index=False)
-    print(f"Runtime analysis for size {size} saved to {output_file}")
+    df.to_csv(output_file_csv, index=False)
+    with open(output_file_json, "w") as json_file:
+        json.dump(json_data[size], json_file, indent=4)
+    print(f"Runtime analysis for size {size} saved to {output_file_csv} and {output_file_json}")
 
 # Combine all rows into a single DataFrame
 all_data = pd.concat([pd.DataFrame(rows[size]) for size in rows])
@@ -181,13 +217,29 @@ conditions = [
     (56568, 16), (80000, 32)
 ]
 
-# Filter and save weak_scaling_data_1.csv
+# Filter and save weak_scaling_data.csv and weak_scaling_data.json
 weak_scaling_data = all_data[
     all_data.apply(
         lambda x: (x["Size"], x["Processes"]) in conditions and
-                  x["Type"] in {"omp","omp_fastest","mpi", "mpi_fastest", "mpi+omp", "mpi+omp_fastest"},
+                  x["Type"] in {"omp", "omp_fastest", "mpi", "mpi_fastest","mpi_fastest_128B", "mpi+omp", "mpi+omp_fastest"},
         axis=1
     )
 ]
-weak_scaling_data.to_csv(os.path.join(analysis_dir, "weak_scaling_data.csv"), index=False)
-print(f"Weak scaling data saved to {os.path.join(analysis_dir, 'weak_scaling_data.csv')}")
+weak_scaling_csv_path = os.path.join(analysis_dir, "weak_scaling_data.csv")
+weak_scaling_json_path = os.path.join(analysis_dir, "weak_scaling_data.json")
+weak_scaling_data.to_csv(weak_scaling_csv_path, index=False)
+
+# Add data points to the weak_scaling_data JSON
+weak_scaling_json = []
+for _, row in weak_scaling_data.iterrows():
+    size = row['Size']
+    matching_entry = next((entry for entry in json_data[size] if 
+                           entry['Processes'] == row['Processes'] and 
+                           entry['Type'] == row['Type']), None)
+    if matching_entry:
+        weak_scaling_json.append(matching_entry)
+
+with open(weak_scaling_json_path, "w") as json_file:
+    json.dump(weak_scaling_json, json_file, indent=4)
+
+print(f"Weak scaling data saved to {weak_scaling_csv_path} and {weak_scaling_json_path}")
