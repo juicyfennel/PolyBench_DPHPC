@@ -28,8 +28,8 @@ num_processes = [1, 4, 9, 16, 25, 36]  # MAX 48
 # num_processes = [1,24]
 # num_processes = [1, 2, 4, 8]  # MAX 48
 # processes_threads = [(2,1), (2,2), (4,2), (4,3), (4,4), (6,4), (8,4)] #20 24 28  32
-# processes_threads = [(4,2), (4,4), (9,2), (4,9), (9,4)] #20 24 28  32
-processes_threads = [(9,4)]
+# processes_threads = [(4,2), (4,4), (9,2), (9,4)] #Jacobi
+processes_threads = [(4,2)]
 
 # processes_threads = [(6,4)]
 

@@ -3,12 +3,26 @@
 #include <string.h>
 #include <math.h>
 #include <mpi.h>
+#include <assert.h>
+#include <time.h>
 
 /* Include polybench common header. */
 #include <polybench.h>
 
 /* Include benchmark-specific header. */
 #include "jacobi-2d.h"
+
+void flush_cache()
+{
+  int cs = 32770 * 1024 * 2 / sizeof(double);
+  double* flush = (double*) calloc (cs, sizeof(double));
+  int i;
+  double tmp = 0.0;
+  for (i = 0; i < cs; i++)
+    tmp += flush[i];
+  assert (tmp <= 10.0);
+  free (flush);
+}
 
 /* Array initialization. */
 static void init_array(int n, // Size of the total matrix
@@ -284,8 +298,10 @@ int main(int argc, char **argv)
              POLYBENCH_ARRAY(A),
              POLYBENCH_ARRAY(B));
 
-  /* Start timer. */
-  polybench_start_instruments;
+  flush_cache();
+
+  struct timespec start, end; 
+  clock_gettime(CLOCK_MONOTONIC_RAW, &start);
 
   /* Run kernel. */
   kernel_jacobi_2d(tsteps,
@@ -299,9 +315,10 @@ int main(int argc, char **argv)
                    size,
                    cart_comm);
 
-  /* Stop and print timer. */
-  polybench_stop_instruments;
-  polybench_print_instruments;
+  clock_gettime(CLOCK_MONOTONIC_RAW, &end);
+
+  printf("Rank %d, Time: %f\n", rank,(end.tv_sec - start.tv_sec) + 1e-9 * (end.tv_nsec - start.tv_nsec));
+
 
   // // Gather all data in rank 0
 
