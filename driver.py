@@ -29,7 +29,7 @@ num_processes = [1, 4, 9, 16, 25, 36]  # MAX 48
 # num_processes = [1, 2, 4, 8]  # MAX 48
 # processes_threads = [(2,1), (2,2), (4,2), (4,3), (4,4), (6,4), (8,4)] #20 24 28  32
 # processes_threads = [(4,2), (4,4), (9,2), (9,4)] #Jacobi
-processes_threads = [(4,2)]
+processes_threads = [(9,4)]
 
 # processes_threads = [(6,4)]
 
@@ -81,7 +81,7 @@ mpi_omp_config = {
     "num_ranks": [process for (process, thread) in processes_threads],
     "threads_per_rank": [thread for (process, thread) in processes_threads],
     "nodes": 8,
-    "total_memory": 70000,
+    "total_memory": 125000,
 }
 
 mpi_omp_gather_config = {
@@ -345,8 +345,8 @@ def run_euler(kernel, interface, p, filename, out_dir_run, t=0):
         content += f"#SBATCH --mem-per-cpu={omp_config['total_memory']}\n\n"
         
     if "omp" in interface:
-        content += "export OMP_DISPLAY_ENV=TRUE\n"
-        content += f"export OMP_NUM_THREADS={p}\n"
+    #     content += "export OMP_DISPLAY_ENV=TRUE\n"
+    #     content += f"export OMP_NUM_THREADS={p}\n"
         content += f"export OMP_PLACES={omp_config['places']}\n"
         content += f"export OMP_PROC_BIND={omp_config['proc_bind']}\n\n"
 
