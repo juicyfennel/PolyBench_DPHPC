@@ -53,9 +53,23 @@ sizes = [
     [80000,[32],[],["mpi_fastest_128B"],200],
     ]
 sizes = [
-    [40000,[],[],["mpi_fastest_128B"],1], # after running this with "1" run for "200" uncommenting "no-compile" taht
+    [14142,[],[],["std_fastest"],200], 
     ]
 
+sizes = [
+    [20000,[2],[],["omp_fastest_128B"],1],
+    [28284,[4],[],["omp_fastest_128B"],1],
+    [40000,[8],[],["omp_fastest_128B"],1],
+    [56568,[16],[],["omp_fastest_128B"],1],
+    [80000,[32],[],["omp_fastest_128B"],1],
+    ]
+# sizes = [
+#     [14142,[],[],["std_fastest_128B"],1],
+#     [40000,[],[],["std_fastest_128B"],1],
+#     ]
+# sizes = [
+#     [40000,[],[],["omp_fastest_128B"],200], 
+# ]
 num_runs = 1
 # interfaces = ["mpi", "mpi_gather", "mpi+omp", "mpi+omp_gather"]
 # interfaces = ["omp", "omp_blocked", "mpi", "mpi+omp"]
@@ -80,5 +94,5 @@ for size in sizes:
             str(size[0]),
             # "--no-compile",
             "--interfaces",
-        ] + size[3] 
+        ] + size[3] + ["--processes"] + [str(i) for i in size[1]]  
         subprocess.run(cmd)
